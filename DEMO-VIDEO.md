@@ -39,7 +39,7 @@ If you want voice *during* a pending request, start the voice call **before** ap
 
 Paste the block in [`demo/voiceover-script.txt`](demo/voiceover-script.txt) into ElevenLabs, OpenAI TTS, or similar.
 
-Target: **~245 words · ~1:45** at a clear product-demo pace (~140 wpm).  
+Target: **~237 words · ~1:45** at a clear product-demo pace (~140 wpm).  
 Speaking style tip for the model: *calm, confident security engineer; slight pause between sentences; no hype.*
 
 ---
