@@ -30,6 +30,22 @@ function supabaseUrl(): string | undefined {
   return envAny("NEXT_PUBLIC_SUPABASE_URL", "SUPABASE_URL");
 }
 
+/** Non-secret URL metadata for hosted debugging. */
+export function supabaseUrlMeta(): {
+  present: boolean;
+  protocol: string | null;
+  host: string | null;
+} {
+  const url = supabaseUrl();
+  if (!url) return { present: false, protocol: null, host: null };
+  try {
+    const u = new URL(url);
+    return { present: true, protocol: u.protocol.replace(":", ""), host: u.host };
+  } catch {
+    return { present: true, protocol: null, host: "invalid-url" };
+  }
+}
+
 function supabaseAnonKey(): string | undefined {
   return envAny(
     "NEXT_PUBLIC_SUPABASE_ANON_KEY",

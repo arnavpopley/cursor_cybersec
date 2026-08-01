@@ -14,6 +14,7 @@ export {
   createServiceClient,
   isSupabaseConfigured,
   supabaseEnvPresence,
+  supabaseUrlMeta,
   tryCreateBrowserClient,
   tryCreateServiceClient,
   type KeyringSupabase,

@@ -1,5 +1,9 @@
 import { NextResponse } from "next/server";
-import { supabaseEnvPresence, tryCreateServiceClient } from "@/lib/supabase";
+import {
+  supabaseEnvPresence,
+  supabaseUrlMeta,
+  tryCreateServiceClient,
+} from "@/lib/supabase";
 import { markExpired, readGrants, readPendingRequests } from "@/lib/expiry";
 import {
   getAccountSnapshot,
@@ -12,6 +16,20 @@ import { parseAccountJson } from "@/engine/parse";
 import { createQueryEngine } from "@/engine/queries";
 
 export const runtime = "nodejs";
+
+function fetchFailedHint(message: string): string {
+  if (/fetch failed/i.test(message)) {
+    return (
+      "Vercel cannot reach Supabase (network fetch failed). Confirm NEXT_PUBLIC_SUPABASE_URL is exactly " +
+      "https://YOUR_REF.supabase.co with https, no trailing slash, no quotes. " +
+      "In Supabase dashboard ensure the project is not paused. Then Redeploy."
+    );
+  }
+  return (
+    "Vercel Supabase keys were found but rejected by the API. Re-copy SUPABASE_SERVICE_ROLE_KEY " +
+    "(full sb_secret_… or Legacy API Keys → service_role JWT) for Production and Redeploy."
+  );
+}
 
 export async function GET() {
   memoryMarkExpired();
@@ -44,12 +62,14 @@ export async function GET() {
   };
 
   const env = supabaseEnvPresence();
+  const url_meta = supabaseUrlMeta();
   const supabase = tryCreateServiceClient();
   if (!supabase) {
     return NextResponse.json({
       ok: true,
       configured: false,
       env,
+      url_meta,
       hint: "Set NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY on Vercel (Production), then Redeploy.",
       ...local,
     });
@@ -63,8 +83,9 @@ export async function GET() {
         ok: true,
         configured: false,
         env,
+        url_meta,
         supabase_error: probe.error.message,
-        hint: "Vercel Supabase keys were found but rejected by the API. Re-copy SUPABASE_SERVICE_ROLE_KEY (full sb_secret_… or legacy service_role JWT) for Production and Redeploy.",
+        hint: fetchFailedHint(probe.error.message),
         ...local,
       });
     }
@@ -106,6 +127,7 @@ export async function GET() {
       ok: true,
       configured: true,
       env,
+      url_meta,
       audit: mergedAudit.slice(0, 40),
       grants: [...grantMap.values()],
       pending_requests: [...pendingMap.values()].filter(
@@ -120,8 +142,9 @@ export async function GET() {
       ok: true,
       configured: false,
       env,
+      url_meta,
       supabase_error: message,
-      hint: "Supabase path crashed; serving local memory. Check Vercel env key names/values and Redeploy.",
+      hint: fetchFailedHint(message),
       ...local,
     });
   }
