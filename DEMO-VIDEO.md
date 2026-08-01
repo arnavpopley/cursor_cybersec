@@ -84,3 +84,7 @@ ELEVENLABS_TO_NUMBER=
 ```
 
 See also: [DEMO-NFC.md](DEMO-NFC.md), [NFC-SETUP.md](NFC-SETUP.md), [VOICE-SETUP.md](VOICE-SETUP.md).
+
+## Download
+
+See cloud agent artifacts for `keyring-demo-1m45s.mp4`.
