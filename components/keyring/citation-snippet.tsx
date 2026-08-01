@@ -37,15 +37,19 @@ export function CitationSnippet({ raw, citation, defaultOpen = false }: Props) {
     : `L${start}–${end}`;
 
   return (
-    <Collapsible open={open} onOpenChange={setOpen} className="border border-border/80 bg-muted/20">
-      <CollapsibleTrigger className="flex w-full items-center gap-1.5 px-2 py-1.5 text-left text-xs hover:bg-muted/40">
+    <Collapsible
+      open={open}
+      onOpenChange={setOpen}
+      className="border border-primary/25 bg-black/40"
+    >
+      <CollapsibleTrigger className="flex w-full items-center gap-1.5 px-2 py-1.5 text-left text-xs hover:bg-primary/5">
         <ChevronRight
           className={cn(
-            "size-3.5 shrink-0 text-muted-foreground transition-transform",
+            "size-3.5 shrink-0 text-primary/70 transition-transform",
             open && "rotate-90",
           )}
         />
-        <span className="font-mono text-[11px] font-medium tracking-tight">
+        <span className="font-mono text-[11px] font-medium tracking-tight text-primary/90">
           {title}
         </span>
         {citation.label ? (
@@ -55,7 +59,7 @@ export function CitationSnippet({ raw, citation, defaultOpen = false }: Props) {
         ) : null}
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <pre className="overflow-x-auto border-t border-border/60 bg-[#0f1419] px-0 py-1 font-mono text-[11px] leading-[1.45] text-[#d6deeb]">
+        <pre className="overflow-x-auto border-t border-primary/15 bg-black/70 px-0 py-1 font-mono text-[11px] leading-[1.45] text-foreground/90">
           {Array.from({ length: viewEnd - viewStart + 1 }, (_, i) => {
             const lineNo = viewStart + i;
             const text = lines[lineNo - 1] ?? "";
@@ -65,10 +69,12 @@ export function CitationSnippet({ raw, citation, defaultOpen = false }: Props) {
                 key={lineNo}
                 className={cn(
                   "flex gap-3 px-2",
-                  hot ? "bg-[#1d3a2f] text-[#e8fff4]" : "opacity-55",
+                  hot
+                    ? "bg-primary/15 text-primary"
+                    : "text-muted-foreground opacity-70",
                 )}
               >
-                <span className="w-8 shrink-0 select-none text-right text-[#7f8aa3]">
+                <span className="w-8 shrink-0 select-none text-right text-primary/40">
                   {lineNo}
                 </span>
                 <code className="whitespace-pre-wrap break-all">{text || " "}</code>

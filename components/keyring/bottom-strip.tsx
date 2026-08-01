@@ -27,7 +27,7 @@ function GrantCountdown({ expiresAt }: { expiresAt: string }) {
     <span
       className={cn(
         "font-mono text-[11px] tabular-nums",
-        urgent ? "text-red-600" : "text-emerald-700",
+        urgent ? "text-red-400" : "text-primary",
       )}
     >
       {formatCountdown(remaining)}
@@ -152,19 +152,19 @@ export function BottomStrip({ localAudit, onLiveUpdate }: Props) {
   );
 
   return (
-    <div className="grid h-36 grid-cols-2 border-t border-border bg-background">
-      <div className="flex min-h-0 flex-col border-r border-border">
-        <div className="flex items-center justify-between border-b border-border/70 px-2 py-1">
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+    <div className="terminal-panel grid h-36 grid-cols-2 border-t">
+      <div className="flex min-h-0 flex-col border-r border-primary/20">
+        <div className="flex items-center justify-between border-b border-primary/15 px-2 py-1">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
             Audit log
           </span>
-          <span className="text-[10px] text-muted-foreground">
+          <span className="text-[10px] text-primary/70">
             {configured ? "live" : "local"}
             {pending.length > 0 ? ` · ${pending.length} pending` : ""}
           </span>
         </div>
         <ScrollArea className="min-h-0 flex-1">
-          <ul className="divide-y divide-border/50">
+          <ul className="divide-y divide-primary/10">
             {audit.length === 0 ? (
               <li className="px-2 py-3 text-[11px] text-muted-foreground">
                 No events yet.
@@ -173,7 +173,7 @@ export function BottomStrip({ localAudit, onLiveUpdate }: Props) {
               audit.map((row) => (
                 <li key={row.id} className="px-2 py-1.5 text-[11px] leading-snug">
                   <div className="flex items-baseline justify-between gap-2">
-                    <span className="font-medium">{row.action}</span>
+                    <span className="font-medium text-primary/90">{row.action}</span>
                     <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
                       {new Date(row.at).toLocaleTimeString()}
                     </span>
@@ -195,16 +195,16 @@ export function BottomStrip({ localAudit, onLiveUpdate }: Props) {
       </div>
 
       <div className="flex min-h-0 flex-col">
-        <div className="flex items-center justify-between border-b border-border/70 px-2 py-1">
-          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+        <div className="flex items-center justify-between border-b border-primary/15 px-2 py-1">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
             Active grants
           </span>
-          <span className="text-[10px] tabular-nums text-muted-foreground">
+          <span className="text-[10px] tabular-nums text-primary/70">
             {activeGrants.length}
           </span>
         </div>
         <ScrollArea className="min-h-0 flex-1">
-          <ul className="divide-y divide-border/50">
+          <ul className="divide-y divide-primary/10">
             {activeGrants.length === 0 ? (
               <li className="px-2 py-3 text-[11px] text-muted-foreground">
                 No active elevated grants.
@@ -216,7 +216,7 @@ export function BottomStrip({ localAudit, onLiveUpdate }: Props) {
                   className="flex items-center justify-between gap-2 px-2 py-1.5 text-[11px]"
                 >
                   <div className="min-w-0">
-                    <div className="truncate font-medium">
+                    <div className="truncate font-medium text-foreground">
                       {g.subject_id} · {g.role}
                     </div>
                     <div className="truncate text-muted-foreground">{g.target}</div>
