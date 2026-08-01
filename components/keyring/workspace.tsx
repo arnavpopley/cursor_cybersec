@@ -1,13 +1,13 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Finding } from "@/engine/findings";
 import type { Citation } from "@/lib/ai/ask";
 import type { Redaction } from "@/lib/ai/redact";
 import type { AuditRow } from "@/lib/supabase/types";
 import { FindingsPanel } from "./findings-panel";
 import { CitationSnippet } from "./citation-snippet";
-import { BottomStrip } from "./bottom-strip";
+import { BottomStrip, type LiveAccountPayload } from "./bottom-strip";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
@@ -79,6 +79,7 @@ export function KeyringWorkspace() {
   const [applyingId, setApplyingId] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [localAudit, setLocalAudit] = useState<AuditRow[]>([]);
+  const lastAccountUpdate = useRef<string | null>(null);
 
   const loaded = Boolean(raw && accountId);
 
@@ -205,8 +206,11 @@ export function KeyringWorkspace() {
       const data = (await res.json()) as {
         ok: boolean;
         mode?: string;
-        message?: string;
-        pending_request?: { id: string; dual_control?: boolean };
+        pending_request?: {
+          id: string;
+          dual_control?: boolean;
+          expires_at?: string;
+        };
         error?: string;
       };
       if (!data.ok) {
@@ -214,24 +218,96 @@ export function KeyringWorkspace() {
         return;
       }
       setLocalAudit((prev) => [
-        newLocalAudit("fix.apply_requested", {
+        newLocalAudit("request.created", {
           finding_id: finding.id,
           request_id: data.pending_request?.id,
           dual_control: data.pending_request?.dual_control ?? false,
+          kind: "apply_fix",
         }),
         ...prev,
       ]);
       setStatus(
-        data.mode === "local"
-          ? data.message ?? "Apply queued locally (awaiting NFC)"
-          : `Pending NFC approval · ${data.pending_request?.id}${
-              data.pending_request?.dual_control ? " · dual control" : ""
-            }`,
+        `Pending NFC tap (60s)${
+          data.pending_request?.dual_control ? " · dual control" : ""
+        } · ${data.pending_request?.id?.slice(0, 8) ?? ""}`,
       );
     } finally {
       setApplyingId(null);
     }
   }, []);
+
+  const refreshFromAccount = useCallback((account: LiveAccountPayload) => {
+    if (lastAccountUpdate.current === account.updated_at) return;
+    lastAccountUpdate.current = account.updated_at;
+    setRaw(account.raw);
+    setAccountId(account.account_id);
+    setFindings(account.findings);
+    if (account.summary) setSummary(account.summary);
+    else {
+      setSummary({
+        subjects: 0,
+        access_groups: 0,
+        policies: 0,
+        findings: account.findings.length,
+      });
+    }
+    setStatus(
+      `Fix applied · ${account.findings.length} findings remain · ${new Date(
+        account.updated_at,
+      ).toLocaleTimeString()}`,
+    );
+  }, []);
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if (!(e.ctrlKey && e.shiftKey && e.key.toLowerCase() === "a")) return;
+      e.preventDefault();
+      void (async () => {
+        setStatus("Demo approve (Ctrl+Shift+A)…");
+        const res = await fetch("/api/tap", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ demo: true }),
+        });
+        const data = (await res.json()) as {
+          ok: boolean;
+          status?: string;
+          message?: string;
+          account?: LiveAccountPayload;
+        };
+        if (!data.ok) {
+          setStatus(data.message ?? "Demo approve failed");
+          return;
+        }
+        setLocalAudit((prev) => [
+          newLocalAudit("request.approved", {
+            demo: true,
+            status: data.status,
+          }),
+          ...prev,
+        ]);
+        if (data.account) {
+          refreshFromAccount({
+            ...data.account,
+            findings: data.account.findings ?? [],
+            updated_at: new Date().toISOString(),
+          });
+        } else {
+          setStatus(data.message ?? "Approved");
+          // Pull latest account/findings from live endpoint.
+          const live = await fetch("/api/account");
+          if (live.ok) {
+            const acc = (await live.json()) as LiveAccountPayload & {
+              ok: boolean;
+            };
+            if (acc.ok) refreshFromAccount(acc);
+          }
+        }
+      })();
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [refreshFromAccount]);
 
   const findingCounts = useMemo(() => {
     const counts = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 };
@@ -365,7 +441,14 @@ export function KeyringWorkspace() {
         </section>
       </div>
 
-      <BottomStrip localAudit={localAudit} />
+      <BottomStrip
+        localAudit={localAudit}
+        onLiveUpdate={(live) => {
+          if (live.account?.updated_at) {
+            refreshFromAccount(live.account);
+          }
+        }}
+      />
     </div>
   );
 }

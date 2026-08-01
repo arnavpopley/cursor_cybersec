@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { parseAccountJson } from "@/engine/parse";
 import { createQueryEngine } from "@/engine/queries";
 import { tryCreateServiceClient } from "@/lib/supabase";
+import { syncAccountFromAnalyze } from "@/lib/approval/service";
+import { memoryInsertAudit } from "@/lib/approval/store";
 
 export const runtime = "nodejs";
 
@@ -22,6 +24,18 @@ export async function POST(request: Request) {
 
   const engine = createQueryEngine(parsed.data);
   const findings = engine.listFindings();
+
+  syncAccountFromAnalyze({
+    raw,
+    account_id: parsed.data.account_id,
+    finding_ids: findings.map((f) => f.id),
+  });
+
+  memoryInsertAudit("system", "account.analyzed", {
+    account_id: parsed.data.account_id,
+    finding_count: findings.length,
+    subject_count: parsed.data.subjects.length,
+  });
 
   const supabase = tryCreateServiceClient();
   if (supabase) {
