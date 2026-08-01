@@ -31,6 +31,8 @@ export type CreateRequestInput = {
   requested_by: string;
   reason: string;
   dual_control?: boolean;
+  /** Pending window in seconds (default 60). */
+  ttl_seconds?: number;
 };
 
 export type TapOutcome =
@@ -70,6 +72,11 @@ export async function createPendingRequest(
   input: CreateRequestInput,
 ): Promise<{ mode: "supabase" | "local"; request: PendingRequestRow }> {
   const dual_control = input.dual_control ?? false;
+  const ttl_seconds = Math.max(5, input.ttl_seconds ?? 60);
+  const created_at = new Date();
+  const expires_at = new Date(
+    created_at.getTime() + ttl_seconds * 1000,
+  ).toISOString();
   const supabase = tryCreateServiceClient();
 
   if (!supabase) {
@@ -79,12 +86,15 @@ export async function createPendingRequest(
       requested_by: input.requested_by,
       reason: input.reason,
       dual_control,
+      created_at: created_at.toISOString(),
+      expires_at,
     });
     await writeAudit(null, input.requested_by, "request.created", {
       request_id: request.id,
       kind: request.kind,
       dual_control: request.dual_control,
       reason: request.reason,
+      ttl_seconds,
     });
     return { mode: "local", request };
   }
@@ -97,6 +107,8 @@ export async function createPendingRequest(
       requested_by: input.requested_by,
       reason: input.reason,
       dual_control,
+      created_at: created_at.toISOString(),
+      expires_at,
     })
     .select("*")
     .single();
@@ -109,12 +121,15 @@ export async function createPendingRequest(
       requested_by: input.requested_by,
       reason: input.reason,
       dual_control,
+      created_at: created_at.toISOString(),
+      expires_at,
     });
     await writeAudit(supabase, input.requested_by, "request.created", {
       request_id: request.id,
       kind: request.kind,
       dual_control: request.dual_control,
       reason: request.reason,
+      ttl_seconds,
       supabase_error: error?.message,
       mode: "local_fallback",
     });
@@ -126,6 +141,7 @@ export async function createPendingRequest(
     kind: data.kind,
     dual_control: data.dual_control,
     reason: data.reason,
+    ttl_seconds,
   });
 
   // Mirror into memory so demo shortcut/tap works even if Realtime lags.

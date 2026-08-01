@@ -230,10 +230,19 @@ export function KeyringWorkspace() {
         }),
         ...prev,
       ]);
+      const ttlSec = data.pending_request?.expires_at
+        ? Math.max(
+            1,
+            Math.round(
+              (new Date(data.pending_request.expires_at).getTime() - Date.now()) /
+                1000,
+            ),
+          )
+        : 60;
       setStatus(
-        `Pending NFC tap (60s)${
-          data.pending_request?.dual_control ? " · dual control" : ""
-        } · ${data.pending_request?.id?.slice(0, 8) ?? ""}`,
+        `Pending NFC tap (${ttlSec}s · 1 card) · ${
+          data.pending_request?.id?.slice(0, 8) ?? ""
+        }`,
       );
     } finally {
       setApplyingId(null);

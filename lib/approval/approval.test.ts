@@ -144,4 +144,23 @@ describe("approval flow", () => {
     expect(ttl).toBeGreaterThan(14 * 60_000);
     expect(ttl).toBeLessThanOrEqual(15 * 60_000);
   });
+
+  it("honors a 30s ttl for single-tap critical-style requests", async () => {
+    const before = Date.now();
+    const { request } = await createPendingRequest({
+      kind: "apply_fix",
+      requested_by: "analyst",
+      reason: "critical single tap",
+      dual_control: false,
+      ttl_seconds: 30,
+      payload: { finding_id: "x" },
+    });
+    expect(request.dual_control).toBe(false);
+    const windowMs =
+      new Date(request.expires_at).getTime() -
+      new Date(request.created_at).getTime();
+    expect(windowMs).toBeGreaterThanOrEqual(29_000);
+    expect(windowMs).toBeLessThanOrEqual(31_000);
+    expect(new Date(request.expires_at).getTime()).toBeGreaterThan(before);
+  });
 });
