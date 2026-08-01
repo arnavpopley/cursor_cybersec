@@ -1,0 +1,219 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import type { AuditRow, GrantRow } from "@/lib/supabase/types";
+import { tryCreateBrowserClient } from "@/lib/supabase/client";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { cn } from "@/lib/utils";
+
+function formatCountdown(ms: number): string {
+  if (ms <= 0) return "0:00";
+  const total = Math.floor(ms / 1000);
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+function GrantCountdown({ expiresAt }: { expiresAt: string }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+  const remaining = new Date(expiresAt).getTime() - now;
+  const urgent = remaining < 60_000;
+  return (
+    <span
+      className={cn(
+        "font-mono text-[11px] tabular-nums",
+        urgent ? "text-red-600" : "text-emerald-700",
+      )}
+    >
+      {formatCountdown(remaining)}
+    </span>
+  );
+}
+
+type Props = {
+  localAudit: AuditRow[];
+};
+
+export function BottomStrip({ localAudit }: Props) {
+  const [audit, setAudit] = useState<AuditRow[]>(localAudit);
+  const [grants, setGrants] = useState<GrantRow[]>([]);
+  const [configured, setConfigured] = useState(false);
+
+  useEffect(() => {
+    setAudit((prev) => {
+      const ids = new Set(prev.map((a) => a.id));
+      const merged = [...localAudit.filter((a) => !ids.has(a.id)), ...prev];
+      return merged.slice(0, 50);
+    });
+  }, [localAudit]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function load() {
+      const res = await fetch("/api/live");
+      const data = (await res.json()) as {
+        configured: boolean;
+        audit: AuditRow[];
+        grants: GrantRow[];
+      };
+      if (cancelled) return;
+      setConfigured(data.configured);
+      if (data.configured) {
+        setAudit(data.audit);
+        setGrants(data.grants);
+      }
+    }
+
+    void load();
+
+    const client = tryCreateBrowserClient();
+    if (!client) return () => {
+      cancelled = true;
+    };
+
+    const channel = client
+      .channel("keyring-live")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "audit" },
+        (payload) => {
+          if (payload.eventType === "INSERT") {
+            const row = payload.new as AuditRow;
+            setAudit((prev) => [row, ...prev].slice(0, 50));
+          }
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "grants" },
+        () => {
+          void load();
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "pending_requests" },
+        () => {
+          void load();
+        },
+      )
+      .subscribe();
+
+    const poll = window.setInterval(() => void load(), 15_000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(poll);
+      void client.removeChannel(channel);
+    };
+  }, []);
+
+  const activeGrants = useMemo(
+    () =>
+      grants.filter(
+        (g) => !g.revoked_at && new Date(g.expires_at).getTime() > Date.now(),
+      ),
+    [grants],
+  );
+
+  return (
+    <div className="grid h-36 grid-cols-2 border-t border-border bg-background">
+      <div className="flex min-h-0 flex-col border-r border-border">
+        <div className="flex items-center justify-between border-b border-border/70 px-2 py-1">
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Audit log
+          </span>
+          <span className="text-[10px] text-muted-foreground">
+            {configured ? "live" : "local"}
+          </span>
+        </div>
+        <ScrollArea className="min-h-0 flex-1">
+          <ul className="divide-y divide-border/50">
+            {audit.length === 0 ? (
+              <li className="px-2 py-3 text-[11px] text-muted-foreground">
+                No events yet.
+              </li>
+            ) : (
+              audit.map((row) => (
+                <li key={row.id} className="px-2 py-1.5 text-[11px] leading-snug">
+                  <div className="flex items-baseline justify-between gap-2">
+                    <span className="font-medium">{row.action}</span>
+                    <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
+                      {new Date(row.at).toLocaleTimeString()}
+                    </span>
+                  </div>
+                  <div className="text-muted-foreground">
+                    {row.actor}
+                    {row.detail && typeof row.detail === "object" ? (
+                      <span>
+                        {" · "}
+                        {summarizeDetail(row.detail as Record<string, unknown>)}
+                      </span>
+                    ) : null}
+                  </div>
+                </li>
+              ))
+            )}
+          </ul>
+        </ScrollArea>
+      </div>
+
+      <div className="flex min-h-0 flex-col">
+        <div className="flex items-center justify-between border-b border-border/70 px-2 py-1">
+          <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            Active grants
+          </span>
+          <span className="text-[10px] tabular-nums text-muted-foreground">
+            {activeGrants.length}
+          </span>
+        </div>
+        <ScrollArea className="min-h-0 flex-1">
+          <ul className="divide-y divide-border/50">
+            {activeGrants.length === 0 ? (
+              <li className="px-2 py-3 text-[11px] text-muted-foreground">
+                No active elevated grants.
+              </li>
+            ) : (
+              activeGrants.map((g) => (
+                <li
+                  key={g.id}
+                  className="flex items-center justify-between gap-2 px-2 py-1.5 text-[11px]"
+                >
+                  <div className="min-w-0">
+                    <div className="truncate font-medium">
+                      {g.subject_id} · {g.role}
+                    </div>
+                    <div className="truncate text-muted-foreground">{g.target}</div>
+                  </div>
+                  <GrantCountdown expiresAt={g.expires_at} />
+                </li>
+              ))
+            )}
+          </ul>
+        </ScrollArea>
+      </div>
+    </div>
+  );
+}
+
+function summarizeDetail(detail: Record<string, unknown>): string {
+  const bits: string[] = [];
+  if (typeof detail.finding_id === "string") bits.push(detail.finding_id);
+  if (typeof detail.account_id === "string") bits.push(detail.account_id);
+  if (typeof detail.question === "string") {
+    bits.push(
+      detail.question.length > 48
+        ? `${detail.question.slice(0, 48)}…`
+        : detail.question,
+    );
+  }
+  if (typeof detail.finding_count === "number") {
+    bits.push(`${detail.finding_count} findings`);
+  }
+  return bits.join(" · ") || "event";
+}
