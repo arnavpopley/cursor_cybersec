@@ -9,6 +9,8 @@ export type ExpiryResult = {
 /**
  * Mark expired pending requests and grants.
  * Call this on every relevant read — do not rely on a cron job.
+ * Returns zeros (does not throw) when Supabase rejects the call so a bad
+ * hosted key cannot take down the whole demo API.
  */
 export async function markExpired(
   client: KeyringSupabase,
@@ -24,7 +26,8 @@ export async function markExpired(
     .select("id");
 
   if (requests.error) {
-    throw new Error(`markExpired requests failed: ${requests.error.message}`);
+    console.error("markExpired requests failed:", requests.error.message);
+    return { expired_requests: 0, expired_grants: 0 };
   }
 
   const grants = await client
@@ -35,7 +38,11 @@ export async function markExpired(
     .select("id");
 
   if (grants.error) {
-    throw new Error(`markExpired grants failed: ${grants.error.message}`);
+    console.error("markExpired grants failed:", grants.error.message);
+    return {
+      expired_requests: requests.data?.length ?? 0,
+      expired_grants: 0,
+    };
   }
 
   return {
@@ -55,7 +62,8 @@ export async function readPendingRequests(
     .order("created_at", { ascending: false });
 
   if (error) {
-    throw new Error(`readPendingRequests failed: ${error.message}`);
+    console.error("readPendingRequests failed:", error.message);
+    return [];
   }
   return data ?? [];
 }
@@ -71,7 +79,8 @@ export async function readGrants(
     .order("granted_at", { ascending: false });
 
   if (error) {
-    throw new Error(`readGrants failed: ${error.message}`);
+    console.error("readGrants failed:", error.message);
+    return [];
   }
   return data ?? [];
 }
@@ -89,7 +98,8 @@ export async function readPendingRequest(
     .maybeSingle();
 
   if (error) {
-    throw new Error(`readPendingRequest failed: ${error.message}`);
+    console.error("readPendingRequest failed:", error.message);
+    return null;
   }
   return data;
 }

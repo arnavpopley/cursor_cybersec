@@ -43,58 +43,86 @@ export async function GET() {
       : null,
   };
 
+  const env = supabaseEnvPresence();
   const supabase = tryCreateServiceClient();
   if (!supabase) {
     return NextResponse.json({
       ok: true,
       configured: false,
-      env: supabaseEnvPresence(),
+      env,
       hint: "Set NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY on Vercel (Production), then Redeploy.",
       ...local,
     });
   }
 
-  await markExpired(supabase);
+  try {
+    // Probe so a bad hosted key returns JSON instead of an opaque 500.
+    const probe = await supabase.from("cards").select("id").limit(1);
+    if (probe.error) {
+      return NextResponse.json({
+        ok: true,
+        configured: false,
+        env,
+        supabase_error: probe.error.message,
+        hint: "Vercel Supabase keys were found but rejected by the API. Re-copy SUPABASE_SERVICE_ROLE_KEY (full sb_secret_… or legacy service_role JWT) for Production and Redeploy.",
+        ...local,
+      });
+    }
 
-  const [auditRes, grants, pending_requests] = await Promise.all([
-    supabase
-      .from("audit")
-      .select("*")
-      .order("at", { ascending: false })
-      .limit(40),
-    readGrants(supabase),
-    readPendingRequests(supabase),
-  ]);
+    await markExpired(supabase);
 
-  const remoteAudit = auditRes.data ?? [];
-  const mergedAudit = [...remoteAudit];
-  for (const row of local.audit) {
-    if (!mergedAudit.some((a) => a.id === row.id)) mergedAudit.push(row);
+    const [auditRes, grants, pending_requests] = await Promise.all([
+      supabase
+        .from("audit")
+        .select("*")
+        .order("at", { ascending: false })
+        .limit(40),
+      readGrants(supabase),
+      readPendingRequests(supabase),
+    ]);
+
+    const remoteAudit = auditRes.data ?? [];
+    const mergedAudit = [...remoteAudit];
+    for (const row of local.audit) {
+      if (!mergedAudit.some((a) => a.id === row.id)) mergedAudit.push(row);
+    }
+    mergedAudit.sort(
+      (a, b) => new Date(b.at).getTime() - new Date(a.at).getTime(),
+    );
+
+    const remoteGrants = grants.filter(
+      (g) => !g.revoked_at && new Date(g.expires_at) > new Date(),
+    );
+    const grantMap = new Map<string, (typeof remoteGrants)[number]>();
+    for (const g of [...remoteGrants, ...local.grants]) grantMap.set(g.id, g);
+
+    const remotePending = pending_requests.filter((r) => r.status === "pending");
+    const pendingMap = new Map<string, (typeof remotePending)[number]>();
+    for (const r of [...remotePending, ...local.pending_requests]) {
+      pendingMap.set(r.id, r);
+    }
+
+    return NextResponse.json({
+      ok: true,
+      configured: true,
+      env,
+      audit: mergedAudit.slice(0, 40),
+      grants: [...grantMap.values()],
+      pending_requests: [...pendingMap.values()].filter(
+        (r) => r.status === "pending",
+      ),
+      account: local.account,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "unknown supabase error";
+    console.error("/api/live supabase path failed:", message);
+    return NextResponse.json({
+      ok: true,
+      configured: false,
+      env,
+      supabase_error: message,
+      hint: "Supabase path crashed; serving local memory. Check Vercel env key names/values and Redeploy.",
+      ...local,
+    });
   }
-  mergedAudit.sort(
-    (a, b) => new Date(b.at).getTime() - new Date(a.at).getTime(),
-  );
-
-  const remoteGrants = grants.filter(
-    (g) => !g.revoked_at && new Date(g.expires_at) > new Date(),
-  );
-  const grantMap = new Map<string, (typeof remoteGrants)[number]>();
-  for (const g of [...remoteGrants, ...local.grants]) grantMap.set(g.id, g);
-
-  const remotePending = pending_requests.filter((r) => r.status === "pending");
-  const pendingMap = new Map<string, (typeof remotePending)[number]>();
-  for (const r of [...remotePending, ...local.pending_requests]) {
-    pendingMap.set(r.id, r);
-  }
-
-  return NextResponse.json({
-    ok: true,
-    configured: true,
-    audit: mergedAudit.slice(0, 40),
-    grants: [...grantMap.values()],
-    pending_requests: [...pendingMap.values()].filter(
-      (r) => r.status === "pending",
-    ),
-    account: local.account,
-  });
 }

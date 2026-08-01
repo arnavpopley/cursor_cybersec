@@ -23,21 +23,44 @@ export async function writeVoiceAudit(
   memoryInsertAudit(actor, action, detail);
   const supabase = tryCreateServiceClient();
   if (!supabase) return;
-  await supabase.from("audit").insert({ actor, action, detail });
+  try {
+    const { error } = await supabase
+      .from("audit")
+      .insert({ actor, action, detail });
+    if (error) {
+      console.error("writeVoiceAudit failed:", error.message);
+    }
+  } catch (err) {
+    console.error(
+      "writeVoiceAudit threw:",
+      err instanceof Error ? err.message : err,
+    );
+  }
 }
 
 export async function getOldestPendingRequest(): Promise<PendingRequestRow | null> {
   const supabase = tryCreateServiceClient();
   if (supabase) {
-    await markExpired(supabase);
-    const { data } = await supabase
-      .from("pending_requests")
-      .select("*")
-      .eq("status", "pending")
-      .gt("expires_at", new Date().toISOString())
-      .order("created_at", { ascending: true })
-      .limit(1);
-    if (data?.[0]) return data[0];
+    try {
+      await markExpired(supabase);
+      const { data, error } = await supabase
+        .from("pending_requests")
+        .select("*")
+        .eq("status", "pending")
+        .gt("expires_at", new Date().toISOString())
+        .order("created_at", { ascending: true })
+        .limit(1);
+      if (error) {
+        console.error("getOldestPendingRequest failed:", error.message);
+      } else if (data?.[0]) {
+        return data[0];
+      }
+    } catch (err) {
+      console.error(
+        "getOldestPendingRequest threw:",
+        err instanceof Error ? err.message : err,
+      );
+    }
   }
   return memoryOldestPending();
 }
