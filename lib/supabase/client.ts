@@ -26,8 +26,35 @@ function envAny(...names: string[]): string | undefined {
   return undefined;
 }
 
+/**
+ * Normalize project URL. Common Vercel paste mistakes:
+ * - trailing slash
+ * - duplicated protocol glued on (`….supabase.cohttps`)
+ * - accidental whitespace / path
+ */
+export function normalizeSupabaseUrl(raw: string): string | undefined {
+  let v = raw.trim().replace(/\/+$/, "");
+  // Fix …supabase.cohttps / …supabase.cohttp glued paste
+  v = v.replace(/(\.supabase\.co)(https?)\/?/i, "$1");
+  v = v.replace(/(\.supabase\.co)https?$/i, "$1");
+  if (!/^https?:\/\//i.test(v)) {
+    v = `https://${v}`;
+  }
+  try {
+    const u = new URL(v);
+    if (!u.hostname.endsWith(".supabase.co")) {
+      return u.origin; // still try; diagnostics will show host
+    }
+    return u.origin; // strip path/query
+  } catch {
+    return undefined;
+  }
+}
+
 function supabaseUrl(): string | undefined {
-  return envAny("NEXT_PUBLIC_SUPABASE_URL", "SUPABASE_URL");
+  const raw = envAny("NEXT_PUBLIC_SUPABASE_URL", "SUPABASE_URL");
+  if (!raw) return undefined;
+  return normalizeSupabaseUrl(raw);
 }
 
 /** Non-secret URL metadata for hosted debugging. */
