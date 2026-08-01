@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import type { AuditRow, GrantRow } from "@/lib/supabase/types";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { AuditRow, GrantRow, PendingRequestRow } from "@/lib/supabase/types";
+import type { Finding } from "@/engine/findings";
 import { tryCreateBrowserClient } from "@/lib/supabase/client";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
@@ -34,14 +35,36 @@ function GrantCountdown({ expiresAt }: { expiresAt: string }) {
   );
 }
 
-type Props = {
-  localAudit: AuditRow[];
+export type LiveAccountPayload = {
+  raw: string;
+  account_id: string;
+  findings: Finding[];
+  updated_at: string;
+  summary?: {
+    subjects: number;
+    access_groups: number;
+    policies: number;
+    findings: number;
+  };
 };
 
-export function BottomStrip({ localAudit }: Props) {
+type Props = {
+  localAudit: AuditRow[];
+  onLiveUpdate?: (live: {
+    audit: AuditRow[];
+    grants: GrantRow[];
+    pending_requests: PendingRequestRow[];
+    account: LiveAccountPayload | null;
+  }) => void;
+};
+
+export function BottomStrip({ localAudit, onLiveUpdate }: Props) {
   const [audit, setAudit] = useState<AuditRow[]>(localAudit);
   const [grants, setGrants] = useState<GrantRow[]>([]);
+  const [pending, setPending] = useState<PendingRequestRow[]>([]);
   const [configured, setConfigured] = useState(false);
+  const onLiveUpdateRef = useRef(onLiveUpdate);
+  onLiveUpdateRef.current = onLiveUpdate;
 
   useEffect(() => {
     setAudit((prev) => {
@@ -60,56 +83,63 @@ export function BottomStrip({ localAudit }: Props) {
         configured: boolean;
         audit: AuditRow[];
         grants: GrantRow[];
+        pending_requests: PendingRequestRow[];
+        account: LiveAccountPayload | null;
       };
       if (cancelled) return;
       setConfigured(data.configured);
-      if (data.configured) {
-        setAudit(data.audit);
-        setGrants(data.grants);
-      }
+      setAudit(data.audit ?? []);
+      setGrants(data.grants ?? []);
+      setPending(data.pending_requests ?? []);
+      onLiveUpdateRef.current?.({
+        audit: data.audit ?? [],
+        grants: data.grants ?? [],
+        pending_requests: data.pending_requests ?? [],
+        account: data.account ?? null,
+      });
     }
 
     void load();
 
     const client = tryCreateBrowserClient();
-    if (!client) return () => {
-      cancelled = true;
-    };
+    let channel: ReturnType<NonNullable<typeof client>["channel"]> | null =
+      null;
 
-    const channel = client
-      .channel("keyring-live")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "audit" },
-        (payload) => {
-          if (payload.eventType === "INSERT") {
-            const row = payload.new as AuditRow;
-            setAudit((prev) => [row, ...prev].slice(0, 50));
-          }
-        },
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "grants" },
-        () => {
-          void load();
-        },
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "pending_requests" },
-        () => {
-          void load();
-        },
-      )
-      .subscribe();
+    if (client) {
+      channel = client
+        .channel("keyring-live")
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "audit" },
+          () => {
+            void load();
+          },
+        )
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "grants" },
+          () => {
+            void load();
+          },
+        )
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "pending_requests" },
+          () => {
+            void load();
+          },
+        )
+        .subscribe();
+    }
 
-    const poll = window.setInterval(() => void load(), 15_000);
+    // Poll quickly while requests are pending so taps show within ~1s even
+    // without Realtime (local demo / stage fallback).
+    const poll = window.setInterval(() => void load(), 1000);
 
     return () => {
       cancelled = true;
       window.clearInterval(poll);
-      void client.removeChannel(channel);
+      if (client && channel) void client.removeChannel(channel);
     };
   }, []);
 
@@ -130,6 +160,7 @@ export function BottomStrip({ localAudit }: Props) {
           </span>
           <span className="text-[10px] text-muted-foreground">
             {configured ? "live" : "local"}
+            {pending.length > 0 ? ` · ${pending.length} pending` : ""}
           </span>
         </div>
         <ScrollArea className="min-h-0 flex-1">
@@ -205,6 +236,9 @@ function summarizeDetail(detail: Record<string, unknown>): string {
   const bits: string[] = [];
   if (typeof detail.finding_id === "string") bits.push(detail.finding_id);
   if (typeof detail.account_id === "string") bits.push(detail.account_id);
+  if (typeof detail.request_id === "string") {
+    bits.push(`req ${detail.request_id.slice(0, 8)}`);
+  }
   if (typeof detail.question === "string") {
     bits.push(
       detail.question.length > 48

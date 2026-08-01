@@ -112,6 +112,7 @@ create trigger audit_no_delete
 -- ---------------------------------------------------------------------------
 alter publication supabase_realtime add table public.pending_requests;
 alter publication supabase_realtime add table public.grants;
+alter publication supabase_realtime add table public.audit;
 
 -- Demo seed cards (optional; safe to re-run with on conflict do nothing)
 insert into public.cards (id, label, holder_name, active)
