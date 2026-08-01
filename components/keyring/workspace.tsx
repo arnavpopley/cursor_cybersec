@@ -79,6 +79,7 @@ export function KeyringWorkspace() {
   const [applyingId, setApplyingId] = useState<string | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [localAudit, setLocalAudit] = useState<AuditRow[]>([]);
+  const [voiceBusy, setVoiceBusy] = useState(false);
   const lastAccountUpdate = useRef<string | null>(null);
 
   const loaded = Boolean(raw && accountId);
@@ -236,6 +237,39 @@ export function KeyringWorkspace() {
     }
   }, []);
 
+  const startVoiceCall = useCallback(async () => {
+    setVoiceBusy(true);
+    setStatus(null);
+    try {
+      const res = await fetch("/api/voice/call", { method: "POST" });
+      const data = (await res.json()) as {
+        ok: boolean;
+        error?: string;
+        mode?: string;
+        message?: string;
+        conversation_id?: string;
+        pending_request?: { id: string; reason: string };
+      };
+      if (!data.ok) {
+        setStatus(data.error ?? "Voice call failed");
+        return;
+      }
+      setLocalAudit((prev) => [
+        newLocalAudit("voice.call_started", {
+          conversation_id: data.conversation_id,
+          mode: data.mode,
+          request_id: data.pending_request?.id,
+        }),
+        ...prev,
+      ]);
+      setStatus(
+        `Voice ${data.mode}: ${data.message ?? "call started"} · agent cannot approve`,
+      );
+    } finally {
+      setVoiceBusy(false);
+    }
+  }, []);
+
   const refreshFromAccount = useCallback((account: LiveAccountPayload) => {
     if (lastAccountUpdate.current === account.updated_at) return;
     lastAccountUpdate.current = account.updated_at;
@@ -363,6 +397,15 @@ export function KeyringWorkspace() {
                   onChange={(e) => void onUpload(e.target.files?.[0] ?? null)}
                 />
               </label>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={voiceBusy}
+                onClick={() => void startVoiceCall()}
+                title="ElevenLabs agent explains the pending request — cannot approve"
+              >
+                {voiceBusy ? "Calling…" : "Voice: explain pending"}
+              </Button>
               {busy === "analyze" ? (
                 <span className="text-[11px] text-muted-foreground">
                   Analyzing…
