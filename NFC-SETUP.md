@@ -39,15 +39,36 @@ Encode an NDEF URI record:
 {APP_BASE_URL}/tap?c={CARD_ID}
 ```
 
-Examples:
+Examples (production):
 
 ```text
-https://keyring.example.com/tap?c=11111111-1111-1111-1111-111111111111
-https://keyring.example.com/tap?c=22222222-2222-2222-2222-222222222222
+https://cursor-cybersec.vercel.app/tap?c=11111111-1111-1111-1111-111111111111
+https://cursor-cybersec.vercel.app/tap?c=22222222-2222-2222-2222-222222222222
+```
+
+Short aliases for stage testing (same cards):
+
+```text
+https://cursor-cybersec.vercel.app/tap?c=a
+https://cursor-cybersec.vercel.app/tap?c=b
 ```
 
 Use an NFC writer app (e.g. NFC Tools) → **Write** → **URL / URI** → paste the
 string above → write to the NTAG.
+
+## Vercel note
+
+Without Supabase, pending requests live in **process memory**. That works for
+`npm run dev` locally, but on Vercel serverless instances a phone tap may not
+see the pending request created by the UI. For a reliable hosted demo, set:
+
+```bash
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+```
+
+…run `supabase/schema.sql` in that project, then redeploy.
 
 ## What happens on tap
 
