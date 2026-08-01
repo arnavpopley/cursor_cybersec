@@ -178,7 +178,11 @@ export function FindingsPanel({ findings, raw, onApply, applyingId }: Props) {
                           disabled={applyingId === finding.id}
                           onClick={() => void onApply(finding)}
                         >
-                          {applyingId === finding.id ? "Requesting…" : "Apply"}
+                          {applyingId === finding.id
+                            ? "Requesting…"
+                            : finding.severity === "CRITICAL"
+                              ? "Apply (2 NFC taps)"
+                              : "Apply (1 NFC tap)"}
                         </Button>
                       </div>
                     </CollapsibleContent>
