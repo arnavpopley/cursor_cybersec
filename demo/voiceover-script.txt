@@ -1,0 +1,15 @@
+This is Keyring — cloud IAM triage with physical approval for privileged change.
+
+We load Acme’s account file. A deterministic engine builds the permission graph and ranks real misconfigurations by severity — critical, high, medium, and low. No invented findings. Every claim traces back to exact lines in the uploaded file.
+
+Here is the headline risk. Contractor Marco looks limited to staging. But he holds Editor on IAM Access Groups. That lets him add himself to the Platform group, and Platform already holds Manager on production Postgres. Privilege escalation in a few steps — with line-level evidence the engine derived, not a model guess.
+
+Ask in plain English. The language model never decides permissions. It only chooses which engine query to run, then phrases the structured result with citations and a confidence score. Secrets are redacted before anything leaves your machine.
+
+When we apply a suggested fix, software cannot finish the job. A sixty-second pending request appears. Approval requires a physical NFC tap on a Keyring card — a channel a stolen session or compromised agent does not control. Dual-control criticals need two distinct cards in the same window.
+
+Tap. The fix applies. The finding clears. The append-only audit log records every step.
+
+A voice agent can explain what is pending and what approving unlocks — but it cannot approve. Approval stays on the card.
+
+Keyring: analyze access paths, fix with proof, approve in the real world.

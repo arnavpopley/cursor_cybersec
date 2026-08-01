@@ -1,20 +1,25 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Keyring
+
+Cloud IAM triage with physical NFC approval. Deterministic engine for
+permissions; LLM only routes questions and phrases answers.
 
 ## Getting Started
 
-First, run the development server:
-
 ```bash
+cp .env.local.example .env.local   # optional keys — demo works without them
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000) or
+[http://localhost:3000/?demo=1](http://localhost:3000/?demo=1) to auto-load
+the Acme fixture.
+
+**Video demo (1:45):** see [DEMO-VIDEO.md](DEMO-VIDEO.md) and paste
+[`demo/voiceover-script.txt`](demo/voiceover-script.txt) into any text-to-speech
+model for the audio overlay.
+
+NFC stage notes: [DEMO-NFC.md](DEMO-NFC.md) · Voice: [VOICE-SETUP.md](VOICE-SETUP.md)
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 

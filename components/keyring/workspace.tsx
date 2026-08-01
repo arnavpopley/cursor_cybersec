@@ -141,6 +141,14 @@ export function KeyringWorkspace() {
     await analyzeRaw(text, "acme-account.json");
   }, [analyzeRaw]);
 
+  // Video / stage shortcut: /?demo=1 auto-loads Acme so recording starts on findings.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("demo") !== "1") return;
+    void loadFixture();
+  }, [loadFixture]);
+
   const onUpload = useCallback(
     async (file: File | null) => {
       if (!file) return;

@@ -1,0 +1,21 @@
+{
+  "name": "keyring-demo",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "install": "npm ci",
+  "ports": [
+    {
+      "name": "Keyring web",
+      "port": 3000
+    }
+  ],
+  "terminals": [
+    {
+      "name": "keyring-dev",
+      "command": "npm run dev -- --hostname 0.0.0.0 --port 3000",
+      "description": "Next.js Keyring UI for the video demo. Open http://localhost:3000 or http://localhost:3000?demo=1 to auto-load the Acme fixture."
+    }
+  ]
+}
