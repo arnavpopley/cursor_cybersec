@@ -9,18 +9,13 @@ function page(opts: {
   detail: string;
   tone: "success" | "wait" | "fail";
 }) {
-  const bg =
-    opts.tone === "success"
-      ? "#0f3d2e"
-      : opts.tone === "wait"
-        ? "#1e293b"
-        : "#3f1d1d";
+  const bg = "#000000";
   const accent =
     opts.tone === "success"
-      ? "#4ade80"
+      ? "#3dff7a"
       : opts.tone === "wait"
-        ? "#38bdf8"
-        : "#f87171";
+        ? "#7dd3fc"
+        : "#ff5c5c";
 
   return new Response(
     `<!DOCTYPE html>
@@ -34,24 +29,25 @@ function page(opts: {
     * { box-sizing: border-box; }
     body {
       margin: 0; min-height: 100dvh; display: grid; place-items: center;
-      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, sans-serif;
-      background: ${bg}; color: #f8fafc; padding: 24px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      background: ${bg}; color: #b7f5c8; padding: 24px;
     }
     .card {
       width: min(520px, 100%);
       border: 1px solid color-mix(in oklab, ${accent} 45%, transparent);
-      background: color-mix(in oklab, #000 25%, ${bg});
-      border-radius: 16px; padding: 28px 24px; text-align: center;
+      background: #050505;
+      border-radius: 4px; padding: 28px 24px; text-align: center;
     }
     .mark {
       width: 72px; height: 72px; margin: 0 auto 18px; border-radius: 999px;
       display: grid; place-items: center; font-size: 36px; font-weight: 700;
-      background: color-mix(in oklab, ${accent} 20%, transparent);
+      background: color-mix(in oklab, ${accent} 15%, transparent);
       color: ${accent}; border: 2px solid ${accent};
     }
-    h1 { margin: 0 0 10px; font-size: clamp(1.6rem, 6vw, 2.2rem); line-height: 1.15; }
-    p { margin: 0; font-size: 1.05rem; line-height: 1.45; color: #e2e8f0; opacity: 0.92; }
-    .meta { margin-top: 18px; font-size: 0.8rem; opacity: 0.65; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    h1 { margin: 0 0 10px; font-size: clamp(1.6rem, 6vw, 2.2rem); line-height: 1.15; color: ${accent};
+      letter-spacing: 0.06em; text-transform: uppercase; }
+    p { margin: 0; font-size: 1.05rem; line-height: 1.45; color: #b7f5c8; opacity: 0.92; }
+    .meta { margin-top: 18px; font-size: 0.8rem; opacity: 0.55; letter-spacing: 0.12em; text-transform: uppercase; }
   </style>
 </head>
 <body>
