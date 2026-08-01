@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Finding } from "@/engine/findings";
 import type { Citation } from "@/lib/ai/ask";
 import type { Redaction } from "@/lib/ai/redact";
-import type { AuditRow } from "@/lib/supabase/types";
+import type { AuditRow, PendingRequestRow } from "@/lib/supabase/types";
 import { FindingsPanel } from "./findings-panel";
 import { CitationSnippet } from "./citation-snippet";
 import { BottomStrip, type LiveAccountPayload } from "./bottom-strip";
@@ -80,6 +80,9 @@ export function KeyringWorkspace() {
   const [status, setStatus] = useState<string | null>(null);
   const [localAudit, setLocalAudit] = useState<AuditRow[]>([]);
   const [voiceBusy, setVoiceBusy] = useState(false);
+  const [pendingRequests, setPendingRequests] = useState<PendingRequestRow[]>(
+    [],
+  );
   const lastAccountUpdate = useRef<string | null>(null);
 
   const loaded = Boolean(raw && accountId);
@@ -349,6 +352,14 @@ export function KeyringWorkspace() {
     return counts;
   }, [findings]);
 
+  const oldestPending = useMemo(() => {
+    if (pendingRequests.length === 0) return null;
+    return [...pendingRequests].sort(
+      (a, b) =>
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+    )[0];
+  }, [pendingRequests]);
+
   return (
     <div className="terminal-scan flex h-dvh min-h-0 flex-col text-foreground">
       <header className="terminal-panel flex h-11 shrink-0 items-center justify-between border-b px-3">
@@ -377,6 +388,10 @@ export function KeyringWorkspace() {
           ) : null}
         </div>
       </header>
+
+      {oldestPending ? (
+        <PendingNfcBanner request={oldestPending} />
+      ) : null}
 
       <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-2">
         {/* Left: upload + Q&A */}
@@ -499,11 +514,46 @@ export function KeyringWorkspace() {
       <BottomStrip
         localAudit={localAudit}
         onLiveUpdate={(live) => {
+          setPendingRequests(
+            (live.pending_requests ?? []).filter((r) => r.status === "pending"),
+          );
           if (live.account?.updated_at) {
             refreshFromAccount(live.account);
           }
         }}
       />
+    </div>
+  );
+}
+
+function PendingNfcBanner({ request }: { request: PendingRequestRow }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 250);
+    return () => window.clearInterval(id);
+  }, []);
+  const remainingMs = Math.max(0, new Date(request.expires_at).getTime() - now);
+  const secs = Math.ceil(remainingMs / 1000);
+  const dual = request.dual_control;
+
+  return (
+    <div className="terminal-fade-in shrink-0 border-b border-primary/40 bg-primary/10 px-3 py-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="min-w-0">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-primary">
+            NFC approval required · {secs}s left
+          </div>
+          <div className="truncate text-xs text-foreground/90">
+            {request.reason || request.kind}
+            {dual ? " · needs Card A then Card B" : " · tap Card A"}
+          </div>
+        </div>
+        <div className="font-mono text-[11px] text-primary/90">
+          {dual
+            ? "Write tags: /tap?c=a  and  /tap?c=b"
+            : "Tag URL: /tap?c=a"}
+        </div>
+      </div>
     </div>
   );
 }
