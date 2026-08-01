@@ -2,21 +2,37 @@ import type { AskModelTool } from "./client";
 import type { QueryEngine } from "@/engine/queries";
 import type { FindingSeverity } from "@/engine/findings";
 
+/**
+ * The five engine queries as OpenAI function-calling tools.
+ * Strict schemas: every property is required; optionals are nullable.
+ */
 export const ENGINE_TOOLS: AskModelTool[] = [
   {
     type: "function",
     function: {
       name: "whoCanAccess",
       description:
-        "List subjects who can access a service (optional resource group and min role).",
+        "List subjects who can access a cloud service, optionally narrowed by resource group and minimum role. Returns subjects and access paths with line citations.",
+      strict: true,
       parameters: {
         type: "object",
         properties: {
-          service: { type: "string" },
-          resourceGroup: { type: "string" },
-          minRole: { type: "string" },
+          service: {
+            type: "string",
+            description:
+              "Service name, e.g. databases-for-postgresql or cloud-object-storage",
+          },
+          resourceGroup: {
+            type: ["string", "null"],
+            description: "Resource group such as production or staging, or null",
+          },
+          minRole: {
+            type: ["string", "null"],
+            description:
+              "Optional role name filter (Viewer, Operator, Editor, Administrator, Reader, Writer, Manager), or null",
+          },
         },
-        required: ["service"],
+        required: ["service", "resourceGroup", "minRole"],
         additionalProperties: false,
       },
     },
@@ -25,11 +41,16 @@ export const ENGINE_TOOLS: AskModelTool[] = [
     type: "function",
     function: {
       name: "whatCanSubjectReach",
-      description: "List targets a subject can reach, with access paths.",
+      description:
+        "List every target a subject can reach, with ordered access paths and evidence.",
+      strict: true,
       parameters: {
         type: "object",
         properties: {
-          subjectId: { type: "string" },
+          subjectId: {
+            type: "string",
+            description: "Subject id such as u-dev-marco or si-deployer",
+          },
         },
         required: ["subjectId"],
         additionalProperties: false,
@@ -41,12 +62,20 @@ export const ENGINE_TOOLS: AskModelTool[] = [
     function: {
       name: "pathsBetween",
       description:
-        "Ordered access paths from a subject to a target like service/resourceGroup.",
+        "Ordered access paths from a subject to a target key like service/resourceGroup (e.g. databases-for-postgresql/production).",
+      strict: true,
       parameters: {
         type: "object",
         properties: {
-          subjectId: { type: "string" },
-          target: { type: "string" },
+          subjectId: {
+            type: "string",
+            description: "Subject id such as u-dev-marco",
+          },
+          target: {
+            type: "string",
+            description:
+              "Target key as service/resourceGroup, or account for account-wide admin",
+          },
         },
         required: ["subjectId", "target"],
         additionalProperties: false,
@@ -57,15 +86,18 @@ export const ENGINE_TOOLS: AskModelTool[] = [
     type: "function",
     function: {
       name: "listFindings",
-      description: "List misconfiguration findings, optionally filtered by severity.",
+      description:
+        "List misconfiguration findings derived by the engine, optionally filtered by minimum severity.",
+      strict: true,
       parameters: {
         type: "object",
         properties: {
           minSeverity: {
-            type: "string",
-            enum: ["CRITICAL", "HIGH", "MEDIUM", "LOW"],
+            type: ["string", "null"],
+            description: "CRITICAL | HIGH | MEDIUM | LOW, or null for all",
           },
         },
+        required: ["minSeverity"],
         additionalProperties: false,
       },
     },
@@ -74,11 +106,16 @@ export const ENGINE_TOOLS: AskModelTool[] = [
     type: "function",
     function: {
       name: "explainPolicy",
-      description: "Explain a policy and which subjects it affects.",
+      description:
+        "Explain a policy by id and list the subjects it affects (including via access groups).",
+      strict: true,
       parameters: {
         type: "object",
         properties: {
-          policyId: { type: "string" },
+          policyId: {
+            type: "string",
+            description: "Policy id such as pol-12",
+          },
         },
         required: ["policyId"],
         additionalProperties: false,
@@ -87,11 +124,22 @@ export const ENGINE_TOOLS: AskModelTool[] = [
   },
 ];
 
+export type EngineToolName =
+  | "whoCanAccess"
+  | "whatCanSubjectReach"
+  | "pathsBetween"
+  | "listFindings"
+  | "explainPolicy";
+
 export type EngineCall = {
-  name: string;
+  name: EngineToolName | string;
   args: Record<string, unknown>;
   result: unknown;
 };
+
+function nullToUndefined<T>(value: T | null | undefined): T | undefined {
+  return value == null ? undefined : value;
+}
 
 export function runEngineTool(
   engine: QueryEngine,
@@ -102,8 +150,10 @@ export function runEngineTool(
     case "whoCanAccess":
       return engine.whoCanAccess(
         String(args.service ?? ""),
-        args.resourceGroup ? String(args.resourceGroup) : undefined,
-        args.minRole ? String(args.minRole) : undefined,
+        nullToUndefined(
+          args.resourceGroup == null ? null : String(args.resourceGroup),
+        ),
+        nullToUndefined(args.minRole == null ? null : String(args.minRole)),
       );
     case "whatCanSubjectReach":
       return engine.whatCanSubjectReach(String(args.subjectId ?? ""));
@@ -114,7 +164,11 @@ export function runEngineTool(
       );
     case "listFindings":
       return engine.listFindings(
-        args.minSeverity as FindingSeverity | undefined,
+        nullToUndefined(
+          args.minSeverity == null
+            ? null
+            : (String(args.minSeverity) as FindingSeverity),
+        ),
       );
     case "explainPolicy":
       return engine.explainPolicy(String(args.policyId ?? ""));
@@ -124,31 +178,25 @@ export function runEngineTool(
 }
 
 /**
- * Deterministic fallback when OpenAI is unavailable.
- * Still only calls engine query functions — never invents permissions.
+ * Deterministic tool selection when the model is unavailable.
+ * Still only selects among the five engine query functions.
  */
-export function routeQuestionToEngine(
-  question: string,
-  engine: QueryEngine,
-): EngineCall {
+export function routeQuestionToTool(question: string): {
+  name: EngineToolName;
+  args: Record<string, unknown>;
+} {
   const q = question.toLowerCase();
 
   const policyMatch = q.match(/\b(pol-\d+)\b/i);
   if (policyMatch && (q.includes("explain") || q.includes("what does"))) {
-    const policyId = policyMatch[1]!.toLowerCase();
     return {
       name: "explainPolicy",
-      args: { policyId },
-      result: engine.explainPolicy(policyId),
+      args: { policyId: policyMatch[1]!.toLowerCase() },
     };
   }
 
   if (q.includes("finding") || q.includes("misconfig") || q.includes("risk")) {
-    return {
-      name: "listFindings",
-      args: {},
-      result: engine.listFindings(),
-    };
+    return { name: "listFindings", args: { minSeverity: null } };
   }
 
   const subjectMatch =
@@ -177,45 +225,44 @@ export function routeQuestionToEngine(
     const subjectId = subjectMatch[1]!;
     const service = serviceMatch?.[1] ?? "databases-for-postgresql";
     const rg = rgMatch?.[1] ?? "production";
-    const target = `${service}/${rg}`;
     return {
       name: "pathsBetween",
-      args: { subjectId, target },
-      result: engine.pathsBetween(subjectId, target),
+      args: { subjectId, target: `${service}/${rg}` },
     };
   }
 
   if (subjectMatch && (q.includes("what can") || q.includes("access does"))) {
-    const subjectId = subjectMatch[1]!;
     return {
       name: "whatCanSubjectReach",
-      args: { subjectId },
-      result: engine.whatCanSubjectReach(subjectId),
+      args: { subjectId: subjectMatch[1]! },
     };
   }
 
   if (serviceMatch || q.includes("who can")) {
-    const service = serviceMatch?.[1] ?? "databases-for-postgresql";
-    const resourceGroup = rgMatch?.[1];
     return {
       name: "whoCanAccess",
-      args: { service, resourceGroup },
-      result: engine.whoCanAccess(service, resourceGroup),
+      args: {
+        service: serviceMatch?.[1] ?? "databases-for-postgresql",
+        resourceGroup: rgMatch?.[1] ?? null,
+        minRole: null,
+      },
     };
   }
 
   if (subjectMatch) {
-    const subjectId = subjectMatch[1]!;
     return {
       name: "whatCanSubjectReach",
-      args: { subjectId },
-      result: engine.whatCanSubjectReach(subjectId),
+      args: { subjectId: subjectMatch[1]! },
     };
   }
 
-  return {
-    name: "listFindings",
-    args: { minSeverity: "HIGH" },
-    result: engine.listFindings("HIGH"),
-  };
+  return { name: "listFindings", args: { minSeverity: "HIGH" } };
+}
+
+export function routeQuestionToEngine(
+  question: string,
+  engine: QueryEngine,
+): EngineCall {
+  const { name, args } = routeQuestionToTool(question);
+  return { name, args, result: runEngineTool(engine, name, args) };
 }

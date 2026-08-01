@@ -2,7 +2,8 @@
 
 import { useCallback, useMemo, useState } from "react";
 import type { Finding } from "@/engine/findings";
-import type { AskAnswer } from "@/lib/ai/ask";
+import type { Citation } from "@/lib/ai/ask";
+import type { Redaction } from "@/lib/ai/redact";
 import type { AuditRow } from "@/lib/supabase/types";
 import { FindingsPanel } from "./findings-panel";
 import { CitationSnippet } from "./citation-snippet";
@@ -11,7 +12,13 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
+import { ChevronRight } from "lucide-react";
 
 type AnalyzeOk = {
   ok: true;
@@ -25,10 +32,26 @@ type AnalyzeOk = {
   findings: Finding[];
 };
 
+type AskOk = {
+  ok: true;
+  answer: string;
+  citations: Citation[];
+  toolCalled: string;
+  args: Record<string, unknown>;
+  confidence: "high" | "medium" | "low";
+  redactions: Redaction[];
+  usedFallback?: boolean;
+};
+
 type QaItem = {
   id: string;
   question: string;
-  answer: AskAnswer;
+  answer: string;
+  citations: Citation[];
+  toolCalled: string;
+  args: Record<string, unknown>;
+  confidence: "high" | "medium" | "low";
+  redactions: Redaction[];
 };
 
 function newLocalAudit(action: string, detail: Record<string, unknown>): AuditRow {
@@ -132,9 +155,7 @@ export function KeyringWorkspace() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ raw, question: question.trim() }),
       });
-      const data = (await res.json()) as
-        | { ok: true; answer: AskAnswer }
-        | { ok: false; error?: string };
+      const data = (await res.json()) as AskOk | { ok: false; error?: string };
       if (!data.ok) {
         setStatus(data.error ?? "Ask failed");
         return;
@@ -144,19 +165,27 @@ export function KeyringWorkspace() {
           id: `qa-${Date.now()}`,
           question: question.trim(),
           answer: data.answer,
+          citations: data.citations,
+          toolCalled: data.toolCalled,
+          args: data.args,
+          confidence: data.confidence,
+          redactions: data.redactions ?? [],
         },
         ...prev,
       ]);
       setLocalAudit((prev) => [
         newLocalAudit("question.asked", {
           question: question.trim(),
-          confidence: data.answer.confidence,
+          confidence: data.confidence,
+          toolCalled: data.toolCalled,
         }),
         ...prev,
       ]);
-      if (data.answer.redactions.length > 0) {
+      if (data.redactions?.length) {
         setStatus(
-          `Redacted ${data.answer.redactions.length} value(s) before model call`,
+          `Redacted ${data.redactions.length} value(s) before model call: ${data.redactions
+            .map((r) => r.to)
+            .join(", ")}`,
         );
       }
     } finally {
@@ -308,62 +337,7 @@ export function KeyringWorkspace() {
                 </p>
               ) : (
                 qa.map((item) => (
-                  <article
-                    key={item.id}
-                    className="space-y-2 border border-border/80 bg-[#fafbfc] p-2"
-                  >
-                    <div className="text-[11px] font-medium text-muted-foreground">
-                      Q · {item.question}
-                    </div>
-                    <div className="flex items-start gap-2">
-                      <p className="flex-1 text-xs leading-relaxed">
-                        {item.answer.text}
-                      </p>
-                      <Badge
-                        variant="outline"
-                        className={cn(
-                          "shrink-0 rounded-sm text-[10px]",
-                          item.answer.confidence === "high" &&
-                            "border-emerald-600 text-emerald-700",
-                          item.answer.confidence === "medium" &&
-                            "border-amber-600 text-amber-700",
-                          item.answer.confidence === "low" &&
-                            "border-slate-400 text-slate-600",
-                        )}
-                      >
-                        {item.answer.confidence}
-                      </Badge>
-                    </div>
-                    {item.answer.redactions.length > 0 ? (
-                      <div className="text-[10px] text-amber-800">
-                        Redacted before model:{" "}
-                        {item.answer.redactions
-                          .map((r) => `${r.kind}→${r.to}`)
-                          .join(", ")}
-                      </div>
-                    ) : null}
-                    <div className="space-y-1">
-                      {item.answer.citations.length === 0 ? (
-                        <div className="text-[10px] text-muted-foreground">
-                          No line citations for this answer.
-                        </div>
-                      ) : (
-                        item.answer.citations.map((c, i) => (
-                          <CitationSnippet
-                            key={`${item.id}-c-${i}`}
-                            raw={raw}
-                            citation={{
-                              line_start: c.line_start,
-                              line_end: c.line_end,
-                              policyId: c.policyId,
-                              label: c.label,
-                            }}
-                            defaultOpen={i === 0}
-                          />
-                        ))
-                      )}
-                    </div>
-                  </article>
+                  <QaCard key={item.id} item={item} raw={raw} />
                 ))
               )}
             </div>
@@ -393,5 +367,88 @@ export function KeyringWorkspace() {
 
       <BottomStrip localAudit={localAudit} />
     </div>
+  );
+}
+
+function QaCard({ item, raw }: { item: QaItem; raw: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <article className="space-y-2 border border-border/80 bg-[#fafbfc] p-2">
+      <div className="text-[11px] font-medium text-muted-foreground">
+        Q · {item.question}
+      </div>
+      <div className="flex items-start gap-2">
+        <p className="flex-1 text-xs leading-relaxed">{item.answer}</p>
+        <Badge
+          variant="outline"
+          className={cn(
+            "shrink-0 rounded-sm text-[10px]",
+            item.confidence === "high" && "border-emerald-600 text-emerald-700",
+            item.confidence === "medium" && "border-amber-600 text-amber-700",
+            item.confidence === "low" && "border-slate-400 text-slate-600",
+          )}
+        >
+          {item.confidence}
+        </Badge>
+      </div>
+      {item.redactions.length > 0 ? (
+        <div className="text-[10px] text-amber-800">
+          Redacted before model:{" "}
+          {item.redactions.map((r) => `${r.kind}→${r.to}`).join(", ")}
+        </div>
+      ) : null}
+
+      <Collapsible open={open} onOpenChange={setOpen}>
+        <CollapsibleTrigger className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground hover:text-foreground">
+          <ChevronRight
+            className={cn(
+              "size-3 transition-transform",
+              open && "rotate-90",
+            )}
+          />
+          How did we get this
+        </CollapsibleTrigger>
+        <CollapsibleContent className="mt-1 space-y-1 border border-border/70 bg-white px-2 py-1.5 font-mono text-[11px]">
+          <div>
+            <span className="text-muted-foreground">toolCalled</span>{" "}
+            <span className="font-semibold">{item.toolCalled}</span>
+          </div>
+          <div>
+            <span className="text-muted-foreground">args</span>{" "}
+            <span>
+              {Object.entries(item.args)
+                .map(([k, v]) => `${k}=${v === null ? "null" : String(v)}`)
+                .join(" · ") || "(none)"}
+            </span>
+          </div>
+          <div className="text-[10px] text-muted-foreground">
+            Model never saw the policy file — only the question and this
+            engine result.
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+
+      <div className="space-y-1">
+        {item.citations.length === 0 ? (
+          <div className="text-[10px] text-muted-foreground">
+            No line citations for this answer.
+          </div>
+        ) : (
+          item.citations.map((c, i) => (
+            <CitationSnippet
+              key={`${item.id}-c-${i}`}
+              raw={raw}
+              citation={{
+                line_start: c.line_start,
+                line_end: c.line_end,
+                policyId: c.policyId,
+                label: c.label,
+              }}
+              defaultOpen={i === 0}
+            />
+          ))
+        )}
+      </div>
+    </article>
   );
 }
