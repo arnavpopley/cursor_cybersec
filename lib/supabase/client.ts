@@ -4,8 +4,17 @@ import type { Database } from "./types";
 export type KeyringSupabase = SupabaseClient<Database>;
 
 function env(name: string): string | undefined {
-  const v = process.env[name];
-  return v && v.trim() ? v.trim() : undefined;
+  const raw = process.env[name];
+  if (!raw) return undefined;
+  let v = raw.trim();
+  // Vercel UI sometimes preserves wrapping quotes from a copy/paste.
+  if (
+    (v.startsWith('"') && v.endsWith('"')) ||
+    (v.startsWith("'") && v.endsWith("'"))
+  ) {
+    v = v.slice(1, -1).trim();
+  }
+  return v || undefined;
 }
 
 /** Resolve first non-empty candidate (supports Supabase Connect aliases). */
