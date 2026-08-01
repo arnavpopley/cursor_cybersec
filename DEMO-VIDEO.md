@@ -35,6 +35,21 @@ If you want voice *during* a pending request, start the voice call **before** ap
 
 ---
 
+## Finished demo video
+
+A recorded cut (screen + TTS voiceover, **1:46**) is produced by:
+
+```bash
+# Requires Chrome with CDP on :9222 and the app on :3000
+ffmpeg -f x11grab …   # see demo/record-demo.py timing
+python3 demo/record-demo.py
+```
+
+Artifacts from the cloud recording run:
+
+- `keyring-demo-1m45s.mp4` — final muxed demo
+- `keyring-demo-voiceover.mp3` — standalone TTS track
+
 ## TTS voiceover
 
 Paste the block in [`demo/voiceover-script.txt`](demo/voiceover-script.txt) into ElevenLabs, OpenAI TTS, or similar.
