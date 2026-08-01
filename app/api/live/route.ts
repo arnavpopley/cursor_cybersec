@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { tryCreateServiceClient } from "@/lib/supabase";
+import { supabaseEnvPresence, tryCreateServiceClient } from "@/lib/supabase";
 import { markExpired, readGrants, readPendingRequests } from "@/lib/expiry";
 import {
   getAccountSnapshot,
@@ -48,6 +48,8 @@ export async function GET() {
     return NextResponse.json({
       ok: true,
       configured: false,
+      env: supabaseEnvPresence(),
+      hint: "Set NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY on Vercel (Production), then Redeploy.",
       ...local,
     });
   }

@@ -4,19 +4,60 @@ import type { Database } from "./types";
 export type KeyringSupabase = SupabaseClient<Database>;
 
 function env(name: string): string | undefined {
-  return process.env[name];
+  const v = process.env[name];
+  return v && v.trim() ? v.trim() : undefined;
 }
 
-export function isSupabaseConfigured(): boolean {
-  return Boolean(
-    env("NEXT_PUBLIC_SUPABASE_URL") && env("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
+/** Resolve first non-empty candidate (supports Supabase Connect aliases). */
+function envAny(...names: string[]): string | undefined {
+  for (const name of names) {
+    const v = env(name);
+    if (v) return v;
+  }
+  return undefined;
+}
+
+function supabaseUrl(): string | undefined {
+  return envAny("NEXT_PUBLIC_SUPABASE_URL", "SUPABASE_URL");
+}
+
+function supabaseAnonKey(): string | undefined {
+  return envAny(
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+    "NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY",
+    "SUPABASE_ANON_KEY",
+    "SUPABASE_PUBLISHABLE_KEY",
   );
 }
 
-function requireEnv(name: string): string {
-  const value = env(name);
+function supabaseServiceKey(): string | undefined {
+  return envAny(
+    "SUPABASE_SERVICE_ROLE_KEY",
+    "SUPABASE_SECRET_KEY",
+    "SUPABASE_SERVICE_KEY",
+  );
+}
+
+/** Safe booleans for debugging hosted env (never returns secret values). */
+export function supabaseEnvPresence(): {
+  url: boolean;
+  anon: boolean;
+  service: boolean;
+} {
+  return {
+    url: Boolean(supabaseUrl()),
+    anon: Boolean(supabaseAnonKey()),
+    service: Boolean(supabaseServiceKey()),
+  };
+}
+
+export function isSupabaseConfigured(): boolean {
+  return Boolean(supabaseUrl() && supabaseAnonKey());
+}
+
+function requireValue(label: string, value: string | undefined): string {
   if (!value) {
-    throw new Error(`Missing environment variable ${name}`);
+    throw new Error(`Missing environment variable ${label}`);
   }
   return value;
 }
@@ -24,15 +65,15 @@ function requireEnv(name: string): string {
 /** Browser / anon client for the demo path (no auth wall). */
 export function createBrowserClient(): KeyringSupabase {
   return createClient<Database>(
-    requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
-    requireEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
+    requireValue("NEXT_PUBLIC_SUPABASE_URL", supabaseUrl()),
+    requireValue("NEXT_PUBLIC_SUPABASE_ANON_KEY", supabaseAnonKey()),
   );
 }
 
 /** Returns null when Supabase env is not configured (demo still runs). */
 export function tryCreateBrowserClient(): KeyringSupabase | null {
-  const url = env("NEXT_PUBLIC_SUPABASE_URL");
-  const key = env("NEXT_PUBLIC_SUPABASE_ANON_KEY");
+  const url = supabaseUrl();
+  const key = supabaseAnonKey();
   if (!url || !key) return null;
   return createClient<Database>(url, key);
 }
@@ -44,8 +85,8 @@ export function tryCreateBrowserClient(): KeyringSupabase | null {
  */
 export function createServiceClient(): KeyringSupabase {
   return createClient<Database>(
-    requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
-    requireEnv("SUPABASE_SERVICE_ROLE_KEY"),
+    requireValue("NEXT_PUBLIC_SUPABASE_URL", supabaseUrl()),
+    requireValue("SUPABASE_SERVICE_ROLE_KEY", supabaseServiceKey()),
     {
       auth: {
         persistSession: false,
@@ -56,8 +97,8 @@ export function createServiceClient(): KeyringSupabase {
 }
 
 export function tryCreateServiceClient(): KeyringSupabase | null {
-  const url = env("NEXT_PUBLIC_SUPABASE_URL");
-  const key = env("SUPABASE_SERVICE_ROLE_KEY");
+  const url = supabaseUrl();
+  const key = supabaseServiceKey();
   if (!url || !key) return null;
   return createClient<Database>(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
