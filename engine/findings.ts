@@ -2,26 +2,26 @@ import type { ParsedAccount, Policy } from "./parse";
 import {
   findPathsToTarget,
   formatTargetKey,
+  type PathStep,
   type PermissionGraph,
 } from "./graph";
 
 export type FindingSeverity = "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
 
 export type FindingEvidence = {
-  policy_id: string | null;
+  policyId: string | null;
   line_start: number;
   line_end: number;
-  subject_id?: string;
-  detail?: string;
 };
 
 export type Finding = {
   id: string;
   severity: FindingSeverity;
   title: string;
+  /** One sentence, plain English. */
   explanation: string;
   evidence: FindingEvidence[];
-  suggested_fix: Record<string, unknown> | null;
+  suggestedFix: Record<string, unknown>;
   confidence: "high" | "medium" | "low";
 };
 
@@ -32,15 +32,58 @@ const SEVERITY_RANK: Record<FindingSeverity, number> = {
   LOW: 1,
 };
 
+const AS_OF = new Date("2026-08-01T00:00:00.000Z");
+
 function isAccountWide(policy: Policy): boolean {
   const r = policy.resources;
   return !r.service && r.resourceGroup == null && r.instanceId == null;
 }
 
-function daysBetween(iso: string, now: Date): number {
+function daysSince(iso: string, now: Date): number {
   const then = new Date(iso);
   if (Number.isNaN(then.getTime())) return 0;
   return Math.floor((now.getTime() - then.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+function evidenceFromPolicy(policy: Policy): FindingEvidence {
+  return {
+    policyId: policy.id,
+    line_start: policy.line_start,
+    line_end: policy.line_end,
+  };
+}
+
+function evidenceFromSteps(steps: PathStep[]): FindingEvidence[] {
+  const seen = new Set<string>();
+  const out: FindingEvidence[] = [];
+  for (const step of steps) {
+    const key = `${step.policy_id ?? "none"}:${step.line_start}:${step.line_end}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({
+      policyId: step.policy_id,
+      line_start: step.line_start,
+      line_end: step.line_end,
+    });
+  }
+  return out;
+}
+
+function nameSteps(steps: PathStep[]): string {
+  return steps
+    .map((step, i) => `(${i + 1}) ${step.reason}`)
+    .join("; ");
+}
+
+function pathIsEscalationChain(path: PathStep[]): boolean {
+  return path.some((step) => {
+    const r = step.reason.toLowerCase();
+    return (
+      r.includes("can add self") ||
+      r.includes("can create service ids") ||
+      r.includes("effective account-wide admin")
+    );
+  });
 }
 
 function claimRuleIsOpen(
@@ -75,20 +118,35 @@ function claimRuleIsOpen(
   return false;
 }
 
-function privilegedSubjectIds(account: ParsedAccount): Set<string> {
-  const privileged = new Set<string>();
+function privilegedPrincipals(account: ParsedAccount): Set<string> {
+  const out = new Set<string>();
   for (const policy of account.policies) {
-    const admin =
-      policy.roles.platform.includes("Administrator") ||
-      policy.roles.service.includes("Manager");
-    if (!admin) continue;
-    for (const s of policy.subjects) privileged.add(s);
+    if (
+      !policy.roles.platform.includes("Administrator") &&
+      !policy.roles.service.includes("Manager")
+    ) {
+      continue;
+    }
+    for (const s of policy.subjects) out.add(s);
   }
-  return privileged;
+  return out;
+}
+
+function policyJson(policy: Policy): Record<string, unknown> {
+  return {
+    id: policy.id,
+    subjects: policy.subjects,
+    roles: {
+      platform: [...policy.roles.platform],
+      service: [...policy.roles.service],
+    },
+    resources: { ...policy.resources },
+  };
 }
 
 /**
- * Derive findings from the account + graph. Never invent findings.
+ * Detect every finding rule from the project spec using the permission graph.
+ * Never invents findings — only emits what the account data + graph derive.
  */
 export function detectFindings(
   graph: PermissionGraph,
@@ -96,36 +154,94 @@ export function detectFindings(
 ): Finding[] {
   const account = graph.account;
   const findings: Finding[] = [];
-  const now = new Date("2026-08-01T00:00:00Z");
   const minRank = minSeverity ? SEVERITY_RANK[minSeverity] : 1;
 
-  // CRITICAL: privilege escalation via iam-groups self-add
-  for (const subject of account.subjects) {
-    const paths = findPathsToTarget(
-      graph,
-      subject.id,
-      "databases-for-postgresql/production",
-    );
-    const viaEscalation = paths.filter((path) =>
-      path.some((s) => s.reason.includes("can add self")),
-    );
-    if (viaEscalation.length === 0) continue;
+  // -------------------------------------------------------------------------
+  // CRITICAL: privilege escalation chains (iam-groups / iam-identity / etc.)
+  // -------------------------------------------------------------------------
+  const escalationTargets = [
+    "databases-for-postgresql/production",
+    "account",
+  ] as const;
 
-    const evidencePath = viaEscalation[0]!;
+  for (const subject of account.subjects) {
+    let best: PathStep[] | null = null;
+    let bestTarget = "";
+
+    for (const target of escalationTargets) {
+      const paths = findPathsToTarget(graph, subject.id, target, {
+        maxDepth: 8,
+        maxPaths: 30,
+      }).filter(pathIsEscalationChain);
+
+      // Prefer paths that actually abuse self-add / mint, not already-members.
+      const abusive = paths.filter((path) =>
+        path.some((s) => {
+          const r = s.reason.toLowerCase();
+          return (
+            r.includes("can add self") ||
+            r.includes("can create service ids") ||
+            r.includes("effective account-wide admin")
+          );
+        }),
+      );
+
+      // Skip if subject already has a non-escalation membership path to the
+      // same target that is shorter or equal (they're a legitimate member).
+      const legitimate = findPathsToTarget(graph, subject.id, target, {
+        maxDepth: 6,
+        maxPaths: 20,
+      }).filter(
+        (path) =>
+          !pathIsEscalationChain(path) &&
+          path.every((s) => {
+            const r = s.reason.toLowerCase();
+            return (
+              r.startsWith("direct policy") ||
+              r.startsWith("member of") ||
+              r.includes("nested membership")
+            );
+          }),
+      );
+
+      if (abusive.length === 0) continue;
+      // Still report escalation if they can self-add even when already a member
+      // of some groups — but skip when a pure membership path exists AND the
+      // abusive path's only "can add self" lands on a group they already belong to.
+      const alreadyMemberPath = legitimate[0];
+      const candidate = abusive.sort((a, b) => a.length - b.length)[0]!;
+
+      if (alreadyMemberPath && alreadyMemberPath.length <= candidate.length) {
+        const selfAdd = candidate.find((s) =>
+          s.reason.toLowerCase().includes("can add self"),
+        );
+        if (selfAdd) {
+          const groupId = selfAdd.to.replace(/^group:/, "");
+          const groups = graph.subjectGroups.get(subject.id);
+          if (groups?.has(groupId)) continue;
+        } else if (!candidate.some((s) => s.reason.includes("can create service IDs") || s.reason.includes("effective account-wide admin"))) {
+          continue;
+        }
+      }
+
+      if (!best || candidate.length < best.length) {
+        best = candidate;
+        bestTarget = target;
+      }
+    }
+
+    if (!best) continue;
+
+    const n = best.length;
+    const stepNames = nameSteps(best);
     findings.push({
       id: `finding-escalation-${subject.id}`,
       severity: "CRITICAL",
-      title: `Privilege escalation to production Postgres via ${subject.id}`,
-      explanation: `${subject.name} can reach Manager-level access on production databases-for-postgresql by abusing IAM access group edit rights.`,
-      evidence: evidencePath.map((step) => ({
-        policy_id: step.policy_id,
-        line_start: step.line_start,
-        line_end: step.line_end,
-        subject_id: subject.id,
-        detail: step.reason,
-      })),
-      suggested_fix: {
-        id: "pol-12-fixed",
+      title: `${subject.name} can escalate to privileged access in ${n} steps`,
+      explanation: `${subject.name} can reach ${bestTarget} in ${n} steps: ${stepNames}.`,
+      evidence: evidenceFromSteps(best),
+      suggestedFix: {
+        id: `remediate-${subject.id}-escalation`,
         subjects: [subject.id],
         roles: { platform: ["Viewer"], service: [] },
         resources: {
@@ -138,30 +254,32 @@ export function detectFindings(
     });
   }
 
-  // CRITICAL: open trusted profile claim rules
+  // -------------------------------------------------------------------------
+  // CRITICAL: trusted profile open claim rules
+  // -------------------------------------------------------------------------
   for (const profile of account.trusted_profiles) {
     if (!claimRuleIsOpen(profile)) continue;
     findings.push({
       id: `finding-open-tp-${profile.id}`,
       severity: "CRITICAL",
-      title: `Trusted profile ${profile.id} is effectively public`,
+      title: `Trusted profile ${profile.name} is an open door`,
       explanation:
-        "Claim rule checks the issuer only (or uses a wildcard), so any matching issuer identity can assume this profile.",
+        "The claim rule checks only the issuer (or uses a wildcard), so any repository on that issuer can assume this profile.",
       evidence: [
         {
-          policy_id: null,
+          policyId: null,
           line_start: profile.line_start,
           line_end: profile.line_end,
-          subject_id: profile.id,
-          detail: "trusted profile claim rule",
         },
       ],
-      suggested_fix: {
+      suggestedFix: {
         id: profile.id,
         name: profile.name,
         claim_rules: [
           {
-            issuer: profile.claim_rules[0]?.issuer ?? "",
+            issuer:
+              profile.claim_rules[0]?.issuer ??
+              "https://token.actions.githubusercontent.com",
             conditions: [
               { claim: "repo", operator: "equals", value: "acme/api" },
             ],
@@ -172,7 +290,9 @@ export function detectFindings(
     });
   }
 
+  // -------------------------------------------------------------------------
   // HIGH: account-wide Administrator or Manager
+  // -------------------------------------------------------------------------
   for (const policy of account.policies) {
     if (!isAccountWide(policy)) continue;
     const dangerous =
@@ -184,17 +304,10 @@ export function detectFindings(
       severity: "HIGH",
       title: `Account-wide privileged grant in ${policy.id}`,
       explanation:
-        "Policy grants Administrator or Manager with no resource attributes, so blast radius is the whole account.",
-      evidence: [
-        {
-          policy_id: policy.id,
-          line_start: policy.line_start,
-          line_end: policy.line_end,
-        },
-      ],
-      suggested_fix: {
-        id: policy.id,
-        subjects: policy.subjects,
+        "This policy grants Administrator or Manager with no resource attributes, so the blast radius is the entire account.",
+      evidence: [evidenceFromPolicy(policy)],
+      suggestedFix: {
+        ...policyJson(policy),
         roles: { platform: ["Operator"], service: ["Writer"] },
         resources: {
           service: "cloud-object-storage",
@@ -206,7 +319,9 @@ export function detectFindings(
     });
   }
 
+  // -------------------------------------------------------------------------
   // HIGH: service ID Administrator + API key with no expiry
+  // -------------------------------------------------------------------------
   for (const subject of account.subjects) {
     if (subject.type !== "serviceId") continue;
     const adminPolicies = account.policies.filter(
@@ -223,35 +338,32 @@ export function detectFindings(
     findings.push({
       id: `finding-si-no-expiry-${subject.id}`,
       severity: "HIGH",
-      title: `Service ID ${subject.id} is Administrator with a non-expiring API key`,
+      title: `Service ID ${subject.name} has Administrator and a non-expiring API key`,
       explanation:
-        "A standing Administrator service ID paired with an API key that never expires is a long-lived account takeover risk.",
-      evidence: [
-        {
-          policy_id: policy.id,
-          line_start: policy.line_start,
-          line_end: policy.line_end,
-          subject_id: subject.id,
+        "A service ID with Administrator plus an API key that never expires is a long-lived standing credential with full privilege.",
+      evidence: [evidenceFromPolicy(policy)],
+      suggestedFix: {
+        id: policy.id,
+        subjects: [subject.id],
+        roles: { platform: ["Operator"], service: ["Writer"] },
+        resources: {
+          service: "cloud-object-storage",
+          resourceGroup: "staging",
+          instanceId: null,
         },
-      ],
-      suggested_fix: {
-        api_key: { ...keys[0], expires: "2026-12-31" },
-        policy: {
-          id: policy.id,
-          subjects: policy.subjects,
-          roles: { platform: ["Operator"], service: ["Writer"] },
-          resources: {
-            service: "cloud-object-storage",
-            resourceGroup: "staging",
-            instanceId: null,
-          },
+        api_key: {
+          id: keys[0]!.id,
+          subject: subject.id,
+          expires: "2026-12-31",
         },
       },
       confidence: "high",
     });
   }
 
-  // HIGH: human Administrator without MFA
+  // -------------------------------------------------------------------------
+  // HIGH: human standing Administrator with MFA disabled
+  // -------------------------------------------------------------------------
   for (const subject of account.subjects) {
     if (subject.type !== "user" || subject.mfa_enabled) continue;
     const adminPolicies = account.policies.filter(
@@ -265,25 +377,22 @@ export function detectFindings(
       severity: "HIGH",
       title: `${subject.name} has standing Administrator without MFA`,
       explanation:
-        "A human user holds Administrator while mfa_enabled is false.",
-      evidence: adminPolicies.map((p) => ({
-        policy_id: p.id,
-        line_start: p.line_start,
-        line_end: p.line_end,
-        subject_id: subject.id,
-      })),
-      suggested_fix: {
+        "A human user holds standing Administrator while mfa_enabled is false.",
+      evidence: adminPolicies.map(evidenceFromPolicy),
+      suggestedFix: {
         id: subject.id,
-        type: subject.type,
+        type: "user",
         name: subject.name,
-        email: "email" in subject ? subject.email : undefined,
+        email: subject.email,
         mfa_enabled: true,
       },
       confidence: "high",
     });
   }
 
-  // MEDIUM: standing Administrator on production for human users
+  // -------------------------------------------------------------------------
+  // MEDIUM: standing Administrator on production for any human user
+  // -------------------------------------------------------------------------
   for (const subject of account.subjects) {
     if (subject.type !== "user") continue;
     for (const policy of account.policies) {
@@ -295,64 +404,65 @@ export function detectFindings(
         severity: "MEDIUM",
         title: `${subject.name} has standing Administrator on production`,
         explanation:
-          "Human user holds standing Administrator on a production resource group.",
-        evidence: [
-          {
-            policy_id: policy.id,
-            line_start: policy.line_start,
-            line_end: policy.line_end,
-            subject_id: subject.id,
-          },
-        ],
-        suggested_fix: {
-          id: policy.id,
-          subjects: policy.subjects,
+          "A human user holds standing Administrator on a production resource group instead of a time-limited grant.",
+        evidence: [evidenceFromPolicy(policy)],
+        suggestedFix: {
+          ...policyJson(policy),
           roles: { platform: ["Editor"], service: ["Writer"] },
-          resources: policy.resources,
         },
         confidence: "high",
       });
     }
   }
 
-  // MEDIUM: privileged API key unused > 90 days
-  const privileged = privilegedSubjectIds(account);
+  // -------------------------------------------------------------------------
+  // MEDIUM: API key unused > 90 days on a privileged subject
+  // -------------------------------------------------------------------------
+  const privileged = privilegedPrincipals(account);
   for (const key of account.api_keys) {
     if (!key.last_used) continue;
-    if (daysBetween(key.last_used, now) <= 90) continue;
-    const subjectPrivileged =
-      privileged.has(key.subject) ||
-      account.policies.some(
+    if (daysSince(key.last_used, AS_OF) <= 90) continue;
+
+    const directAdmin = account.policies.some(
+      (p) =>
+        p.subjects.includes(key.subject) &&
+        (p.roles.platform.includes("Administrator") ||
+          p.roles.service.includes("Manager")),
+    );
+    if (!privileged.has(key.subject) && !directAdmin) continue;
+
+    const policy =
+      account.policies.find(
         (p) =>
           p.subjects.includes(key.subject) &&
           (p.roles.platform.includes("Administrator") ||
             p.roles.service.includes("Manager")),
-      );
-    if (!subjectPrivileged) continue;
+      ) ?? account.policies.find((p) => p.subjects.includes(key.subject));
+
+    if (!policy) continue;
+
     const subject = account.subjects.find((s) => s.id === key.subject);
-    const policy =
-      account.policies.find((p) => p.subjects.includes(key.subject)) ?? null;
     findings.push({
       id: `finding-stale-key-${key.id}`,
       severity: "MEDIUM",
       title: `Privileged API key ${key.id} unused for over 90 days`,
-      explanation: `API key for ${subject?.name ?? key.subject} was last used on ${key.last_used} and still grants privileged access.`,
-      evidence: [
-        {
-          policy_id: policy?.id ?? null,
-          line_start: policy?.line_start ?? 1,
-          line_end: policy?.line_end ?? 1,
-          subject_id: key.subject,
-          detail: `api key ${key.id}`,
-        },
-      ],
-      suggested_fix: { ...key, expires: "2026-08-15" },
+      explanation: `The API key for privileged subject ${subject?.name ?? key.subject} was last used on ${key.last_used} and is still active.`,
+      evidence: [evidenceFromPolicy(policy)],
+      suggestedFix: {
+        id: key.id,
+        subject: key.subject,
+        created: key.created,
+        last_used: key.last_used,
+        expires: "2026-08-15",
+      },
       confidence: "medium",
     });
   }
 
-  // LOW: redundant overlapping grants
-  const grantBuckets = new Map<string, Policy[]>();
+  // -------------------------------------------------------------------------
+  // LOW: redundant or overlapping role grants on the same target
+  // -------------------------------------------------------------------------
+  const buckets = new Map<string, Policy[]>();
   for (const policy of account.policies) {
     const target = isAccountWide(policy)
       ? "account"
@@ -366,35 +476,55 @@ export function detectFindings(
     });
     for (const principal of policy.subjects) {
       const bucketKey = `${principal}|${target}|${rolesKey}`;
-      const list = grantBuckets.get(bucketKey) ?? [];
+      const list = buckets.get(bucketKey) ?? [];
       list.push(policy);
-      grantBuckets.set(bucketKey, list);
+      buckets.set(bucketKey, list);
     }
   }
-  for (const [bucketKey, policies] of grantBuckets) {
+  for (const [bucketKey, policies] of buckets) {
     if (policies.length < 2) continue;
     const [principal, target] = bucketKey.split("|");
+    const keep = policies[0]!;
     findings.push({
-      id: `finding-redundant-${policies.map((p) => p.id).join("-")}`,
+      id: `finding-redundant-${policies.map((p) => p.id).sort().join("-")}`,
       severity: "LOW",
       title: `Redundant grants for ${principal} on ${target}`,
       explanation:
         "Two or more policies grant the same principal the same roles on the same target.",
-      evidence: policies.map((p) => ({
-        policy_id: p.id,
-        line_start: p.line_start,
-        line_end: p.line_end,
-        subject_id: principal,
-      })),
-      suggested_fix: {
-        id: policies[0]!.id,
-        subjects: policies[0]!.subjects,
-        roles: policies[0]!.roles,
-        resources: policies[0]!.resources,
+      evidence: policies.map(evidenceFromPolicy),
+      suggestedFix: policyJson(keep),
+      confidence: "high",
+    });
+  }
+
+  // -------------------------------------------------------------------------
+  // LOW: account setting allowing all users to see all other users
+  // -------------------------------------------------------------------------
+  const settings = (
+    account as ParsedAccount & {
+      account_settings?: { allow_all_users_to_see_all_users?: boolean };
+    }
+  ).account_settings;
+  if (settings?.allow_all_users_to_see_all_users === true) {
+    findings.push({
+      id: "finding-users-can-see-all-users",
+      severity: "LOW",
+      title: "All users can see all other users",
+      explanation:
+        "An account setting allows every user to enumerate every other user in the account.",
+      evidence: [{ policyId: null, line_start: 1, line_end: 1 }],
+      suggestedFix: {
+        account_settings: { allow_all_users_to_see_all_users: false },
       },
       confidence: "high",
     });
   }
 
-  return findings.filter((f) => SEVERITY_RANK[f.severity] >= minRank);
+  return findings
+    .filter((f) => SEVERITY_RANK[f.severity] >= minRank)
+    .sort((a, b) => {
+      const rank = SEVERITY_RANK[b.severity] - SEVERITY_RANK[a.severity];
+      if (rank !== 0) return rank;
+      return a.id.localeCompare(b.id);
+    });
 }
