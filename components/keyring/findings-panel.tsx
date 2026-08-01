@@ -16,10 +16,10 @@ import { ChevronRight } from "lucide-react";
 const ORDER: FindingSeverity[] = ["CRITICAL", "HIGH", "MEDIUM", "LOW"];
 
 const SEVERITY_STYLE: Record<FindingSeverity, string> = {
-  CRITICAL: "bg-red-700 text-white border-transparent",
-  HIGH: "bg-orange-600 text-white border-transparent",
-  MEDIUM: "bg-amber-500 text-black border-transparent",
-  LOW: "bg-slate-500 text-white border-transparent",
+  CRITICAL: "border border-red-500/70 bg-red-950/60 text-red-300",
+  HIGH: "border border-orange-500/60 bg-orange-950/50 text-orange-300",
+  MEDIUM: "border border-amber-400/50 bg-amber-950/40 text-amber-200",
+  LOW: "border border-primary/30 bg-primary/10 text-primary/90",
 };
 
 function summarizeFix(fix: Record<string, unknown>): string[] {
@@ -95,21 +95,23 @@ export function FindingsPanel({ findings, raw, onApply, applyingId }: Props) {
             key={sev}
             open={open}
             onOpenChange={(v) => setOpenSev((s) => ({ ...s, [sev]: v }))}
-            className="border border-border/70"
+            className="border border-primary/25 bg-black/25"
           >
-            <CollapsibleTrigger className="flex w-full items-center gap-2 px-2 py-1.5 text-left hover:bg-muted/40">
+            <CollapsibleTrigger className="flex w-full items-center gap-2 px-2 py-1.5 text-left hover:bg-primary/5">
               <ChevronRight
                 className={cn(
-                  "size-3.5 text-muted-foreground transition-transform",
+                  "size-3.5 text-primary/70 transition-transform",
                   open && "rotate-90",
                 )}
               />
               <Badge className={cn("rounded-sm px-1.5 py-0 text-[10px]", SEVERITY_STYLE[sev])}>
                 {sev}
               </Badge>
-              <span className="text-xs font-medium tabular-nums">{list.length}</span>
+              <span className="text-xs font-medium tabular-nums text-primary/80">
+                {list.length}
+              </span>
             </CollapsibleTrigger>
-            <CollapsibleContent className="border-t border-border/60">
+            <CollapsibleContent className="border-t border-primary/15">
               {list.map((finding) => {
                 const fOpen = openFinding[finding.id] ?? false;
                 return (
@@ -119,31 +121,31 @@ export function FindingsPanel({ findings, raw, onApply, applyingId }: Props) {
                     onOpenChange={(v) =>
                       setOpenFinding((s) => ({ ...s, [finding.id]: v }))
                     }
-                    className="border-b border-border/50 last:border-b-0"
+                    className="border-b border-primary/10 last:border-b-0"
                   >
-                    <CollapsibleTrigger className="flex w-full items-start gap-2 px-2 py-2 text-left hover:bg-muted/30">
+                    <CollapsibleTrigger className="flex w-full items-start gap-2 px-2 py-2 text-left hover:bg-primary/5">
                       <ChevronRight
                         className={cn(
-                          "mt-0.5 size-3.5 shrink-0 text-muted-foreground transition-transform",
+                          "mt-0.5 size-3.5 shrink-0 text-primary/60 transition-transform",
                           fOpen && "rotate-90",
                         )}
                       />
                       <div className="min-w-0 flex-1">
-                        <div className="text-xs font-medium leading-snug">
+                        <div className="text-xs font-medium leading-snug text-foreground">
                           {finding.title}
                         </div>
-                        <div className="mt-0.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                        <div className="mt-0.5 text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
                           confidence {finding.confidence}
                         </div>
                       </div>
                     </CollapsibleTrigger>
-                    <CollapsibleContent className="space-y-2 bg-muted/15 px-2 pb-2 pl-7">
+                    <CollapsibleContent className="space-y-2 bg-black/30 px-2 pb-2 pl-7">
                       <p className="text-xs leading-relaxed text-foreground/90">
                         {finding.explanation}
                       </p>
 
                       <div className="space-y-1">
-                        <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                           Evidence
                         </div>
                         {finding.evidence.map((ev, i) => (
@@ -159,20 +161,20 @@ export function FindingsPanel({ findings, raw, onApply, applyingId }: Props) {
                         ))}
                       </div>
 
-                      <div className="space-y-1.5 rounded-sm border border-border/70 bg-background p-2">
-                        <div className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                      <div className="space-y-1.5 rounded-sm border border-primary/25 bg-black/40 p-2">
+                        <div className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                           Suggested fix
                         </div>
                         <ul className="space-y-0.5 text-xs text-foreground/90">
                           {summarizeFix(finding.suggestedFix).map((line) => (
-                            <li key={line} className="font-mono text-[11px]">
+                            <li key={line} className="font-mono text-[11px] text-primary/85">
                               {line}
                             </li>
                           ))}
                         </ul>
                         <Button
                           size="sm"
-                          className="mt-1 h-7"
+                          className="mt-1 h-7 bg-primary text-primary-foreground hover:bg-primary/90"
                           disabled={applyingId === finding.id}
                           onClick={() => void onApply(finding)}
                         >

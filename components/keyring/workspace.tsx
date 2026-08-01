@@ -350,24 +350,27 @@ export function KeyringWorkspace() {
   }, [findings]);
 
   return (
-    <div className="flex h-dvh min-h-0 flex-col bg-[#f4f5f7] text-foreground">
-      <header className="flex h-10 shrink-0 items-center justify-between border-b border-border bg-white px-3">
-        <div className="flex items-center gap-2">
-          <span className="font-mono text-sm font-semibold tracking-tight">
+    <div className="terminal-scan flex h-dvh min-h-0 flex-col text-foreground">
+      <header className="terminal-panel flex h-11 shrink-0 items-center justify-between border-b px-3">
+        <div className="flex items-center gap-3">
+          <span
+            className="terminal-brand terminal-cursor text-lg font-normal uppercase"
+            style={{ fontFamily: "var(--font-brand), var(--font-terminal), monospace" }}
+          >
             Keyring
           </span>
-          <span className="text-[11px] text-muted-foreground">
-            IAM triage
+          <span className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+            IAM triage // physical approval
           </span>
         </div>
-        <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+        <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
           {fileName ? (
-            <span className="font-mono text-foreground/80">{fileName}</span>
+            <span className="text-primary/90">{fileName}</span>
           ) : (
-            <span>no file loaded</span>
+            <span className="opacity-70">no file loaded</span>
           )}
           {summary ? (
-            <span className="tabular-nums">
+            <span className="tabular-nums text-foreground/80">
               {summary.subjects} subjects · {findingCounts.CRITICAL}C/
               {findingCounts.HIGH}H/{findingCounts.MEDIUM}M/{findingCounts.LOW}L
             </span>
@@ -377,18 +380,19 @@ export function KeyringWorkspace() {
 
       <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-2">
         {/* Left: upload + Q&A */}
-        <section className="flex min-h-0 flex-col border-r border-border bg-white">
+        <section className="terminal-panel flex min-h-0 flex-col border-r">
           <div className="space-y-2 border-b border-border/80 p-2">
             <div className="flex flex-wrap items-center gap-2">
               <Button
                 size="sm"
                 variant="outline"
+                className="border-primary/40 bg-transparent text-primary hover:bg-primary/10 hover:text-primary"
                 disabled={busy === "analyze"}
                 onClick={() => void loadFixture()}
               >
                 Load Acme fixture
               </Button>
-              <label className="inline-flex h-7 cursor-pointer items-center rounded-lg border border-border bg-background px-2.5 text-[0.8rem] hover:bg-muted">
+              <label className="inline-flex h-7 cursor-pointer items-center rounded-sm border border-primary/40 bg-transparent px-2.5 text-[0.8rem] text-primary hover:bg-primary/10">
                 Upload JSON
                 <input
                   type="file"
@@ -400,6 +404,7 @@ export function KeyringWorkspace() {
               <Button
                 size="sm"
                 variant="outline"
+                className="border-primary/40 bg-transparent text-primary hover:bg-primary/10 hover:text-primary"
                 disabled={voiceBusy}
                 onClick={() => void startVoiceCall()}
                 title="ElevenLabs agent explains the pending request — cannot approve"
@@ -407,23 +412,23 @@ export function KeyringWorkspace() {
                 {voiceBusy ? "Calling…" : "Voice: explain pending"}
               </Button>
               {busy === "analyze" ? (
-                <span className="text-[11px] text-muted-foreground">
+                <span className="text-[11px] text-primary/80">
                   Analyzing…
                 </span>
               ) : null}
             </div>
             {parseError ? (
-              <div className="border border-red-300 bg-red-50 px-2 py-1.5 text-xs text-red-800">
+              <div className="border border-destructive/50 bg-destructive/10 px-2 py-1.5 text-xs text-destructive">
                 {parseError}
               </div>
             ) : null}
             {status ? (
-              <div className="text-[11px] text-muted-foreground">{status}</div>
+              <div className="text-[11px] text-primary/70">{status}</div>
             ) : null}
           </div>
 
           <div className="space-y-2 border-b border-border/80 p-2">
-            <label className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <label className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
               Question
             </label>
             <Textarea
@@ -431,12 +436,13 @@ export function KeyringWorkspace() {
               onChange={(e) => setQuestion(e.target.value)}
               disabled={!loaded}
               rows={2}
-              className="min-h-[56px] resize-none text-xs"
+              className="min-h-[56px] resize-none border-primary/25 bg-black/40 text-xs text-foreground placeholder:text-muted-foreground/70"
               placeholder="Ask about access paths, subjects, or findings…"
             />
             <div className="flex items-center gap-2">
               <Button
                 size="sm"
+                className="bg-primary text-primary-foreground hover:bg-primary/90"
                 disabled={!loaded || busy === "ask" || !question.trim()}
                 onClick={() => void ask()}
               >
@@ -455,8 +461,14 @@ export function KeyringWorkspace() {
                   Answers appear here with expandable file citations.
                 </p>
               ) : (
-                qa.map((item) => (
-                  <QaCard key={item.id} item={item} raw={raw} />
+                qa.map((item, i) => (
+                  <div
+                    key={item.id}
+                    className="terminal-fade-in"
+                    style={{ animationDelay: `${Math.min(i, 4) * 60}ms` }}
+                  >
+                    <QaCard item={item} raw={raw} />
+                  </div>
                 ))
               )}
             </div>
@@ -464,12 +476,12 @@ export function KeyringWorkspace() {
         </section>
 
         {/* Right: findings */}
-        <section className="flex min-h-0 flex-col bg-white">
+        <section className="terminal-panel flex min-h-0 flex-col">
           <div className="flex h-9 items-center justify-between border-b border-border/80 px-2">
-            <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
               Findings
             </span>
-            <span className="font-mono text-[11px] tabular-nums text-muted-foreground">
+            <span className="text-[11px] tabular-nums text-primary/80">
               {findings.length}
             </span>
           </div>
@@ -499,33 +511,35 @@ export function KeyringWorkspace() {
 function QaCard({ item, raw }: { item: QaItem; raw: string }) {
   const [open, setOpen] = useState(false);
   return (
-    <article className="space-y-2 border border-border/80 bg-[#fafbfc] p-2">
-      <div className="text-[11px] font-medium text-muted-foreground">
+    <article className="space-y-2 border border-primary/25 bg-black/35 p-2">
+      <div className="text-[11px] font-medium text-primary/70">
         Q · {item.question}
       </div>
       <div className="flex items-start gap-2">
-        <p className="flex-1 text-xs leading-relaxed">{item.answer}</p>
+        <p className="flex-1 text-xs leading-relaxed text-foreground/95">
+          {item.answer}
+        </p>
         <Badge
           variant="outline"
           className={cn(
             "shrink-0 rounded-sm text-[10px]",
-            item.confidence === "high" && "border-emerald-600 text-emerald-700",
-            item.confidence === "medium" && "border-amber-600 text-amber-700",
-            item.confidence === "low" && "border-slate-400 text-slate-600",
+            item.confidence === "high" && "border-primary text-primary",
+            item.confidence === "medium" && "border-amber-400/80 text-amber-300",
+            item.confidence === "low" && "border-muted-foreground text-muted-foreground",
           )}
         >
           {item.confidence}
         </Badge>
       </div>
       {item.redactions.length > 0 ? (
-        <div className="text-[10px] text-amber-800">
+        <div className="text-[10px] text-amber-300/90">
           Redacted before model:{" "}
           {item.redactions.map((r) => `${r.kind}→${r.to}`).join(", ")}
         </div>
       ) : null}
 
       <Collapsible open={open} onOpenChange={setOpen}>
-        <CollapsibleTrigger className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-wide text-muted-foreground hover:text-foreground">
+        <CollapsibleTrigger className="flex items-center gap-1 text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground hover:text-primary">
           <ChevronRight
             className={cn(
               "size-3 transition-transform",
@@ -534,10 +548,10 @@ function QaCard({ item, raw }: { item: QaItem; raw: string }) {
           />
           How did we get this
         </CollapsibleTrigger>
-        <CollapsibleContent className="mt-1 space-y-1 border border-border/70 bg-white px-2 py-1.5 font-mono text-[11px]">
+        <CollapsibleContent className="mt-1 space-y-1 border border-primary/20 bg-black/50 px-2 py-1.5 font-mono text-[11px]">
           <div>
             <span className="text-muted-foreground">toolCalled</span>{" "}
-            <span className="font-semibold">{item.toolCalled}</span>
+            <span className="font-semibold text-primary">{item.toolCalled}</span>
           </div>
           <div>
             <span className="text-muted-foreground">args</span>{" "}
