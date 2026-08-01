@@ -181,7 +181,7 @@ export function FindingsPanel({ findings, raw, onApply, applyingId }: Props) {
                           {applyingId === finding.id
                             ? "Requesting…"
                             : finding.severity === "CRITICAL"
-                              ? "Apply (2 NFC taps)"
+                              ? "Apply (1 NFC tap · 30s)"
                               : "Apply (1 NFC tap)"}
                         </Button>
                       </div>

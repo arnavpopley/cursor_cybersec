@@ -18,12 +18,15 @@ export async function POST(request: Request) {
     );
   }
 
-  const dual_control = body.finding.severity === "CRITICAL";
+  // Single-tag demo: CRITICAL is 1 tap with a shorter 30s window.
+  // Other severities stay 1 tap / 60s.
+  const isCritical = body.finding.severity === "CRITICAL";
   const { mode, request: pending } = await createPendingRequest({
     kind: "apply_fix",
     requested_by: body.requested_by ?? "analyst",
     reason: body.finding.title,
-    dual_control,
+    dual_control: false,
+    ttl_seconds: isCritical ? 30 : 60,
     payload: {
       finding_id: body.finding.id,
       severity: body.finding.severity,

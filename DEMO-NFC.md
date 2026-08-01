@@ -10,21 +10,18 @@ NFC Tools → **Write** → **URL / URI**:
 https://cursor-cybersec.vercel.app/tap?c=a
 ```
 
-Optional second tag (CRITICAL dual-control only):
-
-```text
-https://cursor-cybersec.vercel.app/tap?c=b
-```
+One Card A tag is enough for every severity, including CRITICAL.
 
 ## Live demo script
 
 1. Laptop: open https://cursor-cybersec.vercel.app
 2. **Load Acme fixture**
-3. Findings panel → expand a **HIGH / MEDIUM / LOW** finding → **Apply (1 NFC tap)**  
-   (Skip CRITICAL unless you have two tags.)
-4. Green banner appears: **NFC approval required · Xs left**
-5. Within **60 seconds**, tap the phone to the tag
-6. Phone shows **Approved**; laptop audit updates and the fix applies
+3. Findings → **Apply (1 NFC tap)** on any finding  
+   - CRITICAL expires in **30 seconds**  
+   - HIGH / MEDIUM / LOW expire in **60 seconds**
+4. Green banner: **NFC approval required · Xs left**
+5. Tap the phone to the tag before it expires
+6. Phone shows **Approved**; laptop audit updates
 
 ## Fallback
 
