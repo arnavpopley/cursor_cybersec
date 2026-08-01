@@ -29,23 +29,28 @@ function envAny(...names: string[]): string | undefined {
 /**
  * Normalize project URL. Common Vercel paste mistakes:
  * - trailing slash
+ * - multiline paste (`….supabase.co` + newline + `https`)
  * - duplicated protocol glued on (`….supabase.cohttps`)
  * - accidental whitespace / path
  */
 export function normalizeSupabaseUrl(raw: string): string | undefined {
-  let v = raw.trim().replace(/\/+$/, "");
-  // Fix …supabase.cohttps / …supabase.cohttp glued paste
-  v = v.replace(/(\.supabase\.co)(https?)\/?/i, "$1");
-  v = v.replace(/(\.supabase\.co)https?$/i, "$1");
+  // Collapse all whitespace/newlines from multi-line Vercel paste first.
+  let v = raw.replace(/\s+/g, "").replace(/^["']|["']$/g, "");
+  v = v.replace(/\/+$/, "");
+  // If a project host is present, cut everything after `.supabase.co`.
+  const hostMatch = v.match(
+    /(?:https?:\/\/)?([a-z0-9-]+\.supabase\.co)/i,
+  );
+  if (hostMatch) {
+    return `https://${hostMatch[1].toLowerCase()}`;
+  }
+  // Fix residual …supabase.cohttps glued paste
+  v = v.replace(/(\.supabase\.co)https?/gi, "$1");
   if (!/^https?:\/\//i.test(v)) {
     v = `https://${v}`;
   }
   try {
-    const u = new URL(v);
-    if (!u.hostname.endsWith(".supabase.co")) {
-      return u.origin; // still try; diagnostics will show host
-    }
-    return u.origin; // strip path/query
+    return new URL(v).origin;
   } catch {
     return undefined;
   }
