@@ -11,13 +11,13 @@ Set `APP_BASE_URL` to the publicly reachable origin of the demo (no trailing
 slash), for example:
 
 ```bash
-APP_BASE_URL=https://keyring.example.com
+APP_BASE_URL=https://cursor-cybersec.vercel.app
 ```
 
 Local stage / tunnel example:
 
 ```bash
-APP_BASE_URL=https://abc123.ngrok.app
+APP_BASE_URL=http://localhost:3000
 ```
 
 ## Seed cards

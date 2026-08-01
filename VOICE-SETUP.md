@@ -11,8 +11,10 @@ ELEVENLABS_AGENT_ID=
 ELEVENLABS_AGENT_PHONE_NUMBER_ID=
 ELEVENLABS_TO_NUMBER=+1...
 ELEVENLABS_WEBHOOK_SECRET=          # optional; require signature header when set
-APP_BASE_URL=https://your-demo.example.com
+APP_BASE_URL=https://cursor-cybersec.vercel.app
 ```
+
+Production demo host: `https://cursor-cybersec.vercel.app`
 
 Without the ElevenLabs vars, `POST /api/voice/call` still works in
 **simulated** mode and writes audit events so the demo path stays intact.
