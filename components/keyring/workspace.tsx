@@ -528,6 +528,7 @@ export function KeyringWorkspace() {
 
 function PendingNfcBanner({ request }: { request: PendingRequestRow }) {
   const [now, setNow] = useState(() => Date.now());
+  const [copied, setCopied] = useState<string | null>(null);
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), 250);
     return () => window.clearInterval(id);
@@ -535,6 +536,20 @@ function PendingNfcBanner({ request }: { request: PendingRequestRow }) {
   const remainingMs = Math.max(0, new Date(request.expires_at).getTime() - now);
   const secs = Math.ceil(remainingMs / 1000);
   const dual = request.dual_control;
+  const origin =
+    typeof window !== "undefined" ? window.location.origin : "";
+  const urlA = `${origin}/tap?c=a`;
+  const urlB = `${origin}/tap?c=b`;
+
+  async function copy(label: string, value: string) {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(label);
+      window.setTimeout(() => setCopied(null), 1500);
+    } catch {
+      setCopied("failed");
+    }
+  }
 
   return (
     <div className="terminal-fade-in shrink-0 border-b border-primary/40 bg-primary/10 px-3 py-2">
@@ -545,13 +560,28 @@ function PendingNfcBanner({ request }: { request: PendingRequestRow }) {
           </div>
           <div className="truncate text-xs text-foreground/90">
             {request.reason || request.kind}
-            {dual ? " · needs Card A then Card B" : " · tap Card A"}
+            {dual ? " · tap Card A, then Card B" : " · tap Card A now"}
           </div>
         </div>
-        <div className="font-mono text-[11px] text-primary/90">
-          {dual
-            ? "Write tags: /tap?c=a  and  /tap?c=b"
-            : "Tag URL: /tap?c=a"}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-7 border-primary/50 bg-black/40 px-2 text-[11px] text-primary hover:bg-primary/10"
+            onClick={() => void copy("a", urlA)}
+          >
+            {copied === "a" ? "Copied A" : "Copy tag URL A"}
+          </Button>
+          {dual ? (
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-7 border-primary/50 bg-black/40 px-2 text-[11px] text-primary hover:bg-primary/10"
+              onClick={() => void copy("b", urlB)}
+            >
+              {copied === "b" ? "Copied B" : "Copy tag URL B"}
+            </Button>
+          ) : null}
         </div>
       </div>
     </div>
