@@ -1,3 +1,5 @@
+import { KeyringWorkspace } from "@/components/keyring/workspace";
+
 export default function Home() {
-  return <main>Keyring</main>;
+  return <KeyringWorkspace />;
 }

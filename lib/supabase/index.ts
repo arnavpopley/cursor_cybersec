@@ -12,5 +12,8 @@ export type {
 export {
   createBrowserClient,
   createServiceClient,
+  isSupabaseConfigured,
+  tryCreateBrowserClient,
+  tryCreateServiceClient,
   type KeyringSupabase,
 } from "./client";

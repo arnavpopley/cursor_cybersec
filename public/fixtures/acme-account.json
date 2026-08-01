@@ -1,0 +1,446 @@
+{
+  "account_id": "acc-9f2",
+  "subjects": [
+    {
+      "id": "u-priya",
+      "type": "user",
+      "name": "Priya Raman",
+      "email": "priya@acme.io",
+      "mfa_enabled": true
+    },
+    {
+      "id": "u-james",
+      "type": "user",
+      "name": "James Okonkwo",
+      "email": "james@acme.io",
+      "mfa_enabled": true
+    },
+    {
+      "id": "u-dev-marco",
+      "type": "user",
+      "name": "Marco Silva",
+      "email": "marco.silva@contractor.acme.io",
+      "mfa_enabled": true
+    },
+    {
+      "id": "u-sophie",
+      "type": "user",
+      "name": "Sophie Chen",
+      "email": "sophie@acme.io",
+      "mfa_enabled": true
+    },
+    {
+      "id": "u-alex",
+      "type": "user",
+      "name": "Alex Rivera",
+      "email": "alex@acme.io",
+      "mfa_enabled": true
+    },
+    {
+      "id": "u-jordan",
+      "type": "user",
+      "name": "Jordan Blake",
+      "email": "jordan@acme.io",
+      "mfa_enabled": false
+    },
+    {
+      "id": "u-nina",
+      "type": "user",
+      "name": "Nina Patel",
+      "email": "nina@acme.io",
+      "mfa_enabled": true
+    },
+    {
+      "id": "si-deployer",
+      "type": "serviceId",
+      "name": "Deploy Pipeline"
+    },
+    {
+      "id": "si-backup",
+      "type": "serviceId",
+      "name": "Nightly Backup"
+    },
+    {
+      "id": "si-monitor",
+      "type": "serviceId",
+      "name": "Observability Agent"
+    },
+    {
+      "id": "si-legacy-admin",
+      "type": "serviceId",
+      "name": "Legacy Automation Admin"
+    },
+    {
+      "id": "tp-github-ci",
+      "type": "trustedProfile",
+      "name": "GitHub Actions CI"
+    }
+  ],
+  "access_groups": [
+    {
+      "id": "ag-platform",
+      "name": "Platform",
+      "members": ["u-priya", "u-james"]
+    },
+    {
+      "id": "ag-developers",
+      "name": "Developers",
+      "members": ["u-sophie", "u-nina"]
+    },
+    {
+      "id": "ag-contractors",
+      "name": "Contractors",
+      "members": ["u-dev-marco"]
+    },
+    {
+      "id": "ag-sre",
+      "name": "SRE",
+      "members": ["u-james", "u-alex"]
+    },
+    {
+      "id": "ag-engineering",
+      "name": "Engineering",
+      "members": ["ag-developers", "ag-contractors", "ag-sre"]
+    }
+  ],
+  "trusted_profiles": [
+    {
+      "id": "tp-github-ci",
+      "name": "GitHub Actions CI",
+      "claim_rules": [
+        {
+          "issuer": "https://token.actions.githubusercontent.com",
+          "conditions": []
+        }
+      ]
+    }
+  ],
+  "api_keys": [
+    {
+      "id": "key-deployer",
+      "subject": "si-deployer",
+      "created": "2025-03-12",
+      "last_used": "2026-07-28",
+      "expires": "2027-03-12"
+    },
+    {
+      "id": "key-backup",
+      "subject": "si-backup",
+      "created": "2024-11-01",
+      "last_used": "2026-07-31",
+      "expires": "2026-11-01"
+    },
+    {
+      "id": "key-monitor",
+      "subject": "si-monitor",
+      "created": "2025-06-18",
+      "last_used": "2026-07-30",
+      "expires": "2027-06-18"
+    },
+    {
+      "id": "key-legacy-admin",
+      "subject": "si-legacy-admin",
+      "created": "2022-08-09",
+      "last_used": "2023-04-17",
+      "expires": null
+    }
+  ],
+  "policies": [
+    {
+      "id": "pol-01",
+      "subjects": ["ag-platform"],
+      "roles": { "platform": ["Administrator"], "service": ["Manager"] },
+      "resources": {
+        "service": "databases-for-postgresql",
+        "resourceGroup": "production",
+        "instanceId": null
+      }
+    },
+    {
+      "id": "pol-02",
+      "subjects": ["ag-platform"],
+      "roles": { "platform": ["Editor"], "service": ["Writer"] },
+      "resources": {
+        "service": "cloud-object-storage",
+        "resourceGroup": "production",
+        "instanceId": null
+      }
+    },
+    {
+      "id": "pol-03",
+      "subjects": ["ag-platform"],
+      "roles": { "platform": ["Operator"], "service": ["Reader"] },
+      "resources": {
+        "service": "containers-kubernetes",
+        "resourceGroup": "production",
+        "instanceId": null
+      }
+    },
+    {
+      "id": "pol-04",
+      "subjects": ["ag-sre"],
+      "roles": { "platform": ["Editor"], "service": ["Manager"] },
+      "resources": {
+        "service": "containers-kubernetes",
+        "resourceGroup": "production",
+        "instanceId": null
+      }
+    },
+    {
+      "id": "pol-05",
+      "subjects": ["ag-sre"],
+      "roles": { "platform": ["Operator"], "service": ["Writer"] },
+      "resources": {
+        "service": "cloud-object-storage",
+        "resourceGroup": "production",
+        "instanceId": null
+      }
+    },
+    {
+      "id": "pol-06",
+      "subjects": ["ag-developers"],
+      "roles": { "platform": ["Viewer"], "service": ["Writer"] },
+      "resources": {
+        "service": "cloudantnosqldb",
+        "resourceGroup": "staging",
+        "instanceId": null
+      }
+    },
+    {
+      "id": "pol-07",
+      "subjects": ["ag-developers"],
+      "roles": { "platform": ["Operator"], "service": ["Reader"] },
+      "resources": {
+        "service": "databases-for-postgresql",
+        "resourceGroup": "staging",
+        "instanceId": null
+      }
+    },
+    {
+      "id": "pol-08",
+      "subjects": ["ag-developers"],
+      "roles": { "platform": ["Viewer"], "service": ["Reader"] },
+      "resources": {
+        "service": "cloud-object-storage",
+        "resourceGroup": "staging",
+        "instanceId": null
+      }
+    },
+    {
+      "id": "pol-09",
+      "subjects": ["ag-contractors"],
+      "roles": { "platform": ["Viewer"], "service": ["Writer"] },
+      "resources": {
+        "service": "cloudantnosqldb",
+        "resourceGroup": "staging",
+        "instanceId": null
+      }
+    },
+    {
+      "id": "pol-10",
+      "subjects": ["ag-contractors"],
+      "roles": { "platform": ["Viewer"], "service": ["Reader"] },
+      "resources": {
+        "service": "containers-kubernetes",
+        "resourceGroup": "staging",
+        "instanceId": null
+      }
+    },
+    {
+      "id": "pol-11",
+      "subjects": ["ag-engineering"],
+      "roles": { "platform": ["Viewer"], "service": ["Reader"] },
+      "resources": {
+        "service": "cloud-object-storage",
+        "resourceGroup": "staging",
+        "instanceId": null
+      }
+    },
+    {
+      "id": "pol-12",
+      "subjects": ["u-dev-marco"],
+      "roles": { "platform": ["Editor"], "service": [] },
+      "resources": {
+        "service": "iam-groups",
+        "resourceGroup": null,
+        "instanceId": null
+      }
+    },
+    {
+      "id": "pol-13",
+      "subjects": ["u-priya"],
+      "roles": { "platform": ["Administrator"], "service": ["Manager"] },
+      "resources": {
+        "service": "iam-identity",
+        "resourceGroup": null,
+        "instanceId": null
+      }
+    },
+    {
+      "id": "pol-14",
+      "subjects": ["u-alex"],
+      "roles": { "platform": ["Viewer"], "service": ["Reader"] },
+      "resources": {
+        "service": "iam-groups",
+        "resourceGroup": null,
+        "instanceId": null
+      }
+    },
+    {
+      "id": "pol-15",
+      "subjects": ["u-jordan"],
+      "roles": { "platform": ["Administrator"], "service": ["Manager"] },
+      "resources": {
+        "service": "cloud-object-storage",
+        "resourceGroup": "production",
+        "instanceId": null
+      }
+    },
+    {
+      "id": "pol-16",
+      "subjects": ["u-jordan"],
+      "roles": { "platform": ["Administrator"], "service": [] },
+      "resources": {
+        "service": "iam-identity",
+        "resourceGroup": null,
+        "instanceId": null
+      }
+    },
+    {
+      "id": "pol-17",
+      "subjects": ["si-legacy-admin"],
+      "roles": { "platform": ["Administrator"], "service": ["Manager"] },
+      "resources": {}
+    },
+    {
+      "id": "pol-18",
+      "subjects": ["si-deployer"],
+      "roles": { "platform": ["Operator"], "service": ["Writer"] },
+      "resources": {
+        "service": "containers-kubernetes",
+        "resourceGroup": "staging",
+        "instanceId": null
+      }
+    },
+    {
+      "id": "pol-19",
+      "subjects": ["si-deployer"],
+      "roles": { "platform": ["Viewer"], "service": ["Reader"] },
+      "resources": {
+        "service": "cloud-object-storage",
+        "resourceGroup": "staging",
+        "instanceId": null
+      }
+    },
+    {
+      "id": "pol-20",
+      "subjects": ["si-backup"],
+      "roles": { "platform": ["Viewer"], "service": ["Reader"] },
+      "resources": {
+        "service": "databases-for-postgresql",
+        "resourceGroup": "production",
+        "instanceId": null
+      }
+    },
+    {
+      "id": "pol-21",
+      "subjects": ["si-backup"],
+      "roles": { "platform": ["Operator"], "service": ["Writer"] },
+      "resources": {
+        "service": "cloud-object-storage",
+        "resourceGroup": "production",
+        "instanceId": null
+      }
+    },
+    {
+      "id": "pol-22",
+      "subjects": ["si-monitor"],
+      "roles": { "platform": ["Viewer"], "service": ["Reader"] },
+      "resources": {
+        "service": "containers-kubernetes",
+        "resourceGroup": "production",
+        "instanceId": null
+      }
+    },
+    {
+      "id": "pol-23",
+      "subjects": ["si-monitor"],
+      "roles": { "platform": ["Viewer"], "service": ["Reader"] },
+      "resources": {
+        "service": "databases-for-postgresql",
+        "resourceGroup": "staging",
+        "instanceId": null
+      }
+    },
+    {
+      "id": "pol-24",
+      "subjects": ["tp-github-ci"],
+      "roles": { "platform": ["Operator"], "service": ["Writer"] },
+      "resources": {
+        "service": "containers-kubernetes",
+        "resourceGroup": "staging",
+        "instanceId": null
+      }
+    },
+    {
+      "id": "pol-25",
+      "subjects": ["tp-github-ci"],
+      "roles": { "platform": ["Viewer"], "service": ["Reader"] },
+      "resources": {
+        "service": "cloud-object-storage",
+        "resourceGroup": "staging",
+        "instanceId": null
+      }
+    },
+    {
+      "id": "pol-26",
+      "subjects": ["u-sophie"],
+      "roles": { "platform": ["Editor"], "service": ["Writer"] },
+      "resources": {
+        "service": "cloudantnosqldb",
+        "resourceGroup": "production",
+        "instanceId": null
+      }
+    },
+    {
+      "id": "pol-27",
+      "subjects": ["u-nina"],
+      "roles": { "platform": ["Viewer"], "service": ["Reader"] },
+      "resources": {
+        "service": "cloudantnosqldb",
+        "resourceGroup": "staging",
+        "instanceId": null
+      }
+    },
+    {
+      "id": "pol-28",
+      "subjects": ["u-james"],
+      "roles": { "platform": ["Administrator"], "service": ["Manager"] },
+      "resources": {
+        "service": "iam-groups",
+        "resourceGroup": null,
+        "instanceId": null
+      }
+    },
+    {
+      "id": "pol-29",
+      "subjects": ["ag-developers"],
+      "roles": { "platform": ["Viewer"], "service": ["Reader"] },
+      "resources": {
+        "service": "cloud-object-storage",
+        "resourceGroup": "staging",
+        "instanceId": null
+      }
+    },
+    {
+      "id": "pol-30",
+      "subjects": ["u-nina"],
+      "roles": { "platform": ["Viewer"], "service": ["Reader"] },
+      "resources": {
+        "service": "cloudantnosqldb",
+        "resourceGroup": "staging",
+        "instanceId": null
+      }
+    }
+  ]
+}

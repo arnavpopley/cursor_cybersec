@@ -3,8 +3,18 @@ import type { Database } from "./types";
 
 export type KeyringSupabase = SupabaseClient<Database>;
 
+function env(name: string): string | undefined {
+  return process.env[name];
+}
+
+export function isSupabaseConfigured(): boolean {
+  return Boolean(
+    env("NEXT_PUBLIC_SUPABASE_URL") && env("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
+  );
+}
+
 function requireEnv(name: string): string {
-  const value = process.env[name];
+  const value = env(name);
   if (!value) {
     throw new Error(`Missing environment variable ${name}`);
   }
@@ -17,6 +27,14 @@ export function createBrowserClient(): KeyringSupabase {
     requireEnv("NEXT_PUBLIC_SUPABASE_URL"),
     requireEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
   );
+}
+
+/** Returns null when Supabase env is not configured (demo still runs). */
+export function tryCreateBrowserClient(): KeyringSupabase | null {
+  const url = env("NEXT_PUBLIC_SUPABASE_URL");
+  const key = env("NEXT_PUBLIC_SUPABASE_ANON_KEY");
+  if (!url || !key) return null;
+  return createClient<Database>(url, key);
 }
 
 /**
@@ -35,4 +53,13 @@ export function createServiceClient(): KeyringSupabase {
       },
     },
   );
+}
+
+export function tryCreateServiceClient(): KeyringSupabase | null {
+  const url = env("NEXT_PUBLIC_SUPABASE_URL");
+  const key = env("SUPABASE_SERVICE_ROLE_KEY");
+  if (!url || !key) return null;
+  return createClient<Database>(url, key, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
 }
