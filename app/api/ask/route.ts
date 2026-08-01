@@ -6,6 +6,14 @@ import { tryCreateServiceClient } from "@/lib/supabase";
 
 export const runtime = "nodejs";
 
+/**
+ * Ask pipeline:
+ * 1. Redact key/token/email shaped input (recorded)
+ * 2. Send the question with the five engine tools (never the policy file)
+ * 3. Execute the chosen engine function server-side
+ * 4. Send structured engine output back for phrasing
+ * 5. Return { answer, citations, toolCalled, args, confidence }
+ */
 export async function POST(request: Request) {
   const body = (await request.json()) as { raw?: string; question?: string };
   if (!body.raw || !body.question?.trim()) {
@@ -15,13 +23,18 @@ export async function POST(request: Request) {
     );
   }
 
+  // Policy file is parsed server-side for the engine only.
+  // It is never forwarded to the model.
   const parsed = parseAccountJson(body.raw);
   if (!parsed.ok) {
-    return NextResponse.json({ ok: false, errors: parsed.errors }, { status: 400 });
+    return NextResponse.json(
+      { ok: false, errors: parsed.errors },
+      { status: 400 },
+    );
   }
 
   const engine = createQueryEngine(parsed.data);
-  const answer = await answerQuestion(body.question.trim(), engine);
+  const result = await answerQuestion(body.question.trim(), engine);
 
   const supabase = tryCreateServiceClient();
   if (supabase) {
@@ -30,12 +43,23 @@ export async function POST(request: Request) {
       action: "question.asked",
       detail: {
         question: body.question.trim(),
-        confidence: answer.confidence,
-        engine_calls: answer.engine_calls.map((c) => c.name),
-        used_model: answer.used_model,
+        confidence: result.confidence,
+        toolCalled: result.toolCalled,
+        args: result.args,
+        usedFallback: result.usedFallback,
+        redaction_count: result.redactions.length,
       },
     });
   }
 
-  return NextResponse.json({ ok: true, answer });
+  return NextResponse.json({
+    ok: true,
+    answer: result.answer,
+    citations: result.citations,
+    toolCalled: result.toolCalled,
+    args: result.args,
+    confidence: result.confidence,
+    redactions: result.redactions,
+    usedFallback: result.usedFallback,
+  });
 }
